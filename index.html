@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>本当にあった怖いスープ - 実話の謎をAIと推理で競う</title>
-<meta name="description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、ライバルAIと交互に質問して解き明かす推理ゲーム。">
+<meta name="description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーと交互に質問して解き明かす推理ゲーム。">
 <meta name="theme-color" content="#3a2f4f">
 <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta property="og:title" content="本当にあった怖いスープ - 実話の謎をAIと推理で競う">
-<meta property="og:description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、ライバルAIと交互に質問して解き明かす推理ゲーム。">
+<meta property="og:description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーと交互に質問して解き明かす推理ゲーム。">
 <meta property="og:url" content="https://kyunkyunpeachdisco-maker.github.io/honkowa-soup/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://kyunkyunpeachdisco-maker.github.io/honkowa-soup/icons/ogp.png">
@@ -67,6 +67,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 #game { display: flex; flex-direction: column; height: 100%; }
 .board { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
 .question { white-space: pre-wrap; margin: 0 0 8px; font-size: 15px; }
+.board .question { max-height: 32dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .scores { display: flex; gap: 12px; align-items: center; font-size: 14px; flex-wrap: wrap; }
 .scores .you { color: var(--you); font-weight: 600; }
 .scores .rival { color: var(--rival); font-weight: 600; }
@@ -136,7 +137,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <button id="btn-settings">設定</button>
   </header>
   <main id="view-list">
-    <p class="intro">謎はすべて実話です。ライバルAIと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
+    <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
     <div id="puzzle-list"></div>
   </main>
@@ -146,7 +147,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
         <p class="question" id="q-text"></p>
         <div class="scores">
           <span class="you">あなた <span id="s-you">0</span></span>
-          <span class="rival">ライバル <span id="s-rival">0</span></span>
+          <span class="rival">AIプレイヤー <span id="s-rival">0</span></span>
           <span class="turns"><span id="s-turns">0</span>手目</span>
         </div>
       </div>
@@ -168,7 +169,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="settings" class="overlay hidden">
   <div class="modal">
     <h2>セットアップ</h2>
-    <p class="note">このゲームは、出題者（審判）とライバルを Google の Gemini AI が担当します。遊ぶには Gemini のAPIキーが1つ必要です。<br>
+    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。遊ぶには Gemini のAPIキーが1つ必要です。<br>
     キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先はGoogleのAPIだけです。</p>
 
     <section class="step">
@@ -190,7 +191,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       </details>
       <details>
         <summary>無料枠について</summary>
-        <p>1回の対戦で、質問のたびに審判とライバルの呼び出しが発生します。1日に使える回数を超えると「上限に達しました」と表示されて止まります。進行は保存されているので、時間をおいて「再開」すれば続きから遊べます。</p>
+        <p>1回の対戦で、質問のたびに審判とAIプレイヤーの呼び出しが発生します。1日に使える回数を超えると「上限に達しました」と表示されて止まります。進行は保存されているので、時間をおいて「再開」すれば続きから遊べます。</p>
         <p>無料枠では、入力した内容がGoogleのサービス改善に使われる場合があります。個人的な情報は入力しないでください。</p>
       </details>
     </section>
@@ -277,7 +278,7 @@ async function callGemini(system, prompt, temperature) {
 function historyText(game) {
   if (!game.moves.length) return '（まだ質問はありません）';
   return game.moves.map((m, i) => {
-    const who = m.by === 'you' ? 'プレイヤー' : 'ライバル';
+    const who = m.by === 'you' ? '人間プレイヤー' : 'AIプレイヤー';
     const kind = m.kind === 'question' ? '質問' : '解答';
     return `${i + 1}. ${who}の${kind}：${m.text}\n   → ${m.reply}`;
   }).join('\n');
@@ -322,24 +323,36 @@ ${text}
 【今回の解答】
 ${text}
 
-この解答が【正解条件】を満たしているか判定してください。表現の違いは問わないが、正解条件の要素が欠けていれば不正解。
+この解答が【正解条件】の「必須」要素をすべて押さえているか判定してください。言い回しや細かさの違いは問わず、意味が合っていれば満たしたとみなす。必須以外の細部（数字・人名・補足の事実）が抜けていても正解。必須要素が1つでも欠けているか、資料と食い違う内容が含まれていれば不正解。
 形式：{"correct":true|false,"reason":"判定理由（答え合わせ画面でのみ表示）"}`;
   const r = await callGemini(GM_SYSTEM, prompt, 0);
   return { correct: r.correct === true, reason: String(r.reason || '') };
 }
 
-const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスープ」でプレイヤーと対戦するライバルです。真相は知りません。問題文と公開された質問履歴だけから推理します。
+const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスープ」で人間プレイヤーと対戦するAIプレイヤーです。真相は知りません。問題文と公開された質問履歴だけから推理します。
 ルール：手番では「質問」か「解答」のどちらか1つ。質問は「はい／いいえ」で答えられる形で、1つの事実だけを確かめる。
 得点：まだ見つかっていない重要な事実を質問で確定させると+1。真相に正解すると+2で終了。解答を外すと-1。真相に関係ない質問や、既に分かっていることの聞き直しは-1。
-正直に推理し、真相に近づく質問をしてください。8割以上の確信があるときだけ解答します。JSONだけを返す。`;
+正直に推理し、真相に近づく質問をしてください。
+解答は、問題文と「はい」「部分的にはい」で確認された事実だけから組み立てる。似た実話や雑学を知っていても、質問で確かめていない要素を解答に含めない。8割以上の確信があるときだけ解答します。JSONだけを返す。`;
+
+// 知識だけで即答できないよう、確認済みの事実が一定数そろうまでAIプレイヤーは解答できない
+const RIVAL_MIN_CONFIRMED = 3;
 
 async function rivalMove(game) {
   const s = game.scores;
-  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】あなた（ライバル）${s.rival}点、プレイヤー${s.you}点\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
-  const r = await callGemini(RIVAL_SYSTEM, prompt, 0.7);
+  const confirmed = game.moves.filter(m => m.reply === 'はい' || m.reply === '部分的にはい').length;
+  const canAnswer = confirmed >= RIVAL_MIN_CONFIRMED;
+  const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。`;
+  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】あなた（AIプレイヤー）${s.rival}点、人間プレイヤー${s.you}点${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
+  let r = await callGemini(RIVAL_SYSTEM, prompt, 0.7);
+  // 解答できない段階で解答を返したら、質問を出し直させる（質問扱いにすると審判が解答とみなして素通りするため）
+  for (let i = 0; i < 2 && !canAnswer && r.type === 'answer'; i++) {
+    r = await callGemini(RIVAL_SYSTEM, prompt + '\n\n解答は禁止です。「はい／いいえ」で答えられる質問を1つだけ返してください。', 0.7);
+  }
+  if (!canAnswer && r.type === 'answer') throw new ApiError('AIプレイヤーの手を読み取れませんでした。もう一度試してください。', -1);
   const type = r.type === 'answer' ? 'answer' : 'question';
   const text = String(r.text || '').trim();
-  if (!text) throw new ApiError('ライバルの手を読み取れませんでした。もう一度試してください。', -1);
+  if (!text) throw new ApiError('AIプレイヤーの手を読み取れませんでした。もう一度試してください。', -1);
   return { type, text };
 }
 
@@ -424,7 +437,7 @@ async function applyMove(by, kind, text) {
 
 async function runRival() {
   if (busy || game.finished || game.turn !== 'rival') return;
-  setBusy(true, 'ライバルが考えています…');
+  setBusy(true, 'AIプレイヤーが考えています…');
   try {
     const m = await rivalMove(game);
     await applyMove('rival', m.type, m.text);
@@ -461,7 +474,7 @@ function renderGame() {
   if (!game.moves.length) h.appendChild(el('p', 'system', 'あなたの手番から始まります。'));
   game.moves.forEach((m, i) => {
     const d = el('div', 'move');
-    d.appendChild(el('div', `who ${m.by}`, `${i + 1}手目・${m.by === 'you' ? 'あなた' : 'ライバル'}の${m.kind === 'question' ? '質問' : '解答'}`));
+    d.appendChild(el('div', `who ${m.by}`, `${i + 1}手目・${m.by === 'you' ? 'あなた' : 'AIプレイヤー'}の${m.kind === 'question' ? '質問' : '解答'}`));
     d.appendChild(el('div', 'text', m.text));
     const r = el('div', 'reply', `→ ${m.reply}`);
     r.appendChild(el('span', `pts ${m.pts > 0 ? 'plus' : m.pts < 0 ? 'minus' : ''}`, ptsLabel(m.pts)));
@@ -499,9 +512,9 @@ function showReveal() {
   const v = document.getElementById('view-reveal');
   v.textContent = '';
   const s = game.scores;
-  const winner = s.you > s.rival ? 'あなたの勝ち' : s.you < s.rival ? 'ライバルの勝ち' : '引き分け';
-  const solved = game.result === 'you' ? 'あなたが真相を当てました' : game.result === 'rival' ? 'ライバルが真相を当てました' : '降参';
-  v.appendChild(el('div', 'result', `${winner}（あなた ${s.you}点・ライバル ${s.rival}点）`));
+  const winner = s.you > s.rival ? 'あなたの勝ち' : s.you < s.rival ? 'AIプレイヤーの勝ち' : '引き分け';
+  const solved = game.result === 'you' ? 'あなたが真相を当てました' : game.result === 'rival' ? 'AIプレイヤーが真相を当てました' : '降参';
+  v.appendChild(el('div', 'result', `${winner}（あなた ${s.you}点・AIプレイヤー ${s.rival}点）`));
   v.appendChild(el('p', 'note', `${solved}・${game.moves.length}手`));
 
   v.appendChild(el('h2', '', '問題'));
@@ -512,7 +525,7 @@ function showReveal() {
   answerData.discoveries.forEach(d => {
     const by = game.found[d.id];
     const li = el('li', '', d.fact);
-    li.appendChild(el('span', 'note', by ? `（${by === 'you' ? 'あなた' : 'ライバル'}が発見）` : '（未発見）'));
+    li.appendChild(el('span', 'note', by ? `（${by === 'you' ? 'あなた' : 'AIプレイヤー'}が発見）` : '（未発見）'));
     if (by) li.style.color = by === 'you' ? 'var(--you)' : 'var(--rival)';
     ul.appendChild(li);
   });
@@ -539,7 +552,7 @@ function showReveal() {
   const t = el('table', 'log-table');
   game.moves.forEach((m, i) => {
     const tr = el('tr');
-    tr.appendChild(el('td', '', `${i + 1}・${m.by === 'you' ? 'あなた' : 'ライバル'}`));
+    tr.appendChild(el('td', '', `${i + 1}・${m.by === 'you' ? 'あなた' : 'AIプレイヤー'}`));
     const td = el('td', '', `${m.text}\n→ ${m.reply}（${ptsLabel(m.pts)}）${m.reason ? `\n判定：${m.reason}` : ''}`);
     td.style.whiteSpace = 'pre-wrap';
     tr.appendChild(td);
@@ -610,6 +623,26 @@ document.getElementById('btn-giveup').onclick = giveUp;
 document.getElementById('input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); playerMove('question'); }
 });
+
+// iOS: キーボード表示時に画面全体が押し上げられて問題文が隠れるため、visualViewport に合わせてアプリの高さを縮める（ohire と同じ対処）
+if (window.visualViewport) {
+  const app = document.querySelector('.app');
+  const fitViewport = () => {
+    const vv = window.visualViewport;
+    const keyboard = window.innerHeight - vv.offsetTop - vv.height > 10 && vv.scale <= 1.01;
+    if (keyboard) {
+      app.style.height = vv.height + 'px';
+      app.style.transform = `translateY(${vv.offsetTop}px)`;
+      const h = document.getElementById('history');
+      h.scrollTop = h.scrollHeight;
+    } else {
+      app.style.height = '';
+      app.style.transform = '';
+    }
+  };
+  window.visualViewport.addEventListener('resize', fitViewport);
+  window.visualViewport.addEventListener('scroll', fitViewport);
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   try { await loadPuzzles(); }
