@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>本当にあった怖いスープ - 実話の謎をAIと推理で競う</title>
 <meta name="description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーと交互に質問して解き明かす推理ゲーム。">
 <meta name="theme-color" content="#3a2f4f">
@@ -29,7 +29,7 @@
   }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -43,7 +43,7 @@ button {
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
 a { color: var(--you); }
-.app { max-width: 680px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column; }
+.app { position: fixed; top: 0; left: 0; right: 0; max-width: 680px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column; }
 header {
   display: flex; align-items: center; gap: 8px; padding: 10px 16px;
   border-bottom: 1px solid var(--line); background: var(--panel);
@@ -115,7 +115,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 @media print {
   :root { --bg: #ffffff; --panel: #ffffff; --ink: #000000; --sub: #555555; --line: #cccccc; --chip: #eeeeee; }
   header, .export, .reveal-actions, #view-list, #view-game, .overlay { display: none !important; }
-  html, body, .app { height: auto !important; overflow: visible !important; transform: none !important; }
+  html, body, .app { height: auto !important; overflow: visible !important; transform: none !important; position: static !important; }
   main { overflow: visible !important; }
 }
 
@@ -248,7 +248,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.3';
+const APP_VERSION = 'v0.1.4';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -849,21 +849,25 @@ document.getElementById('input').addEventListener('keydown', e => {
 // iOS: キーボード表示時に画面全体が押し上げられて問題文が隠れるため、visualViewport に合わせてアプリの高さを縮める（ohire と同じ対処）
 if (window.visualViewport) {
   const app = document.querySelector('.app');
+  // アプリを position:fixed にし、常に「いま見えている範囲」の高さと位置に合わせる。
+  // iOS はキーボード表示時に innerHeight も縮むことがあり、差分で判定すると検出できないため、判定せず毎回合わせる
+  let lastHeight = 0;
   const fitViewport = () => {
     const vv = window.visualViewport;
-    const keyboard = window.innerHeight - vv.offsetTop - vv.height > 10 && vv.scale <= 1.01;
-    if (keyboard) {
-      app.style.height = vv.height + 'px';
-      app.style.transform = `translateY(${vv.offsetTop}px)`;
+    if (vv.scale > 1.01) { app.style.height = ''; app.style.transform = ''; return; } // ピンチ拡大中は触らない
+    app.style.height = vv.height + 'px';
+    app.style.transform = `translateY(${vv.offsetTop}px)`;
+    if (vv.height < lastHeight) {
       const h = document.getElementById('history');
       h.scrollTop = h.scrollHeight;
-    } else {
-      app.style.height = '';
-      app.style.transform = '';
     }
+    lastHeight = vv.height;
   };
   window.visualViewport.addEventListener('resize', fitViewport);
   window.visualViewport.addEventListener('scroll', fitViewport);
+  // キーボードを出した拍子にページ自体がスクロールされたら戻す
+  window.addEventListener('scroll', () => { if (window.scrollY) window.scrollTo(0, 0); fitViewport(); });
+  fitViewport();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
