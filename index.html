@@ -271,7 +271,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.6';
+const APP_VERSION = 'v0.1.7';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -304,13 +304,40 @@ class ApiError extends Error {
   // detail: 原因調査用の補足（モデル名・HTTPステータス・APIのエラー文など）。画面に小さく出す
   constructor(message, status, detail = '') { super(message); this.status = status; this.detail = detail; }
 }
+// 太平洋時間の次の0時（Gemini の1日あたりの上限がリセットされる時刻）を、端末の時刻で表す
+function nextPacificMidnight() {
+  const now = new Date();
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const next = new Date(pt); next.setHours(24, 0, 0, 0);
+  return new Date(now.getTime() + (next - pt)).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+
+// 429 の中身（Gemini は details に QuotaFailure / RetryInfo を返す）から、1分の上限か1日の上限かを見分ける
+function quotaKind(err) {
+  const details = Array.isArray(err?.details) ? err.details : [];
+  const ids = details.flatMap(d => (d.violations || []).map(v => `${v.quotaId || ''} ${v.quotaMetric || ''}`)).join(' ');
+  const retry = details.find(d => d.retryDelay)?.retryDelay || '';
+  const sec = parseInt(retry, 10);
+  if (/PerDay/i.test(ids)) return { kind: 'day', sec };
+  if (/PerMinute/i.test(ids)) return { kind: 'minute', sec };
+  return { kind: '', sec };
+}
+
 async function httpError(res, service, model) {
-  let apiMsg = '';
-  try { apiMsg = (await res.json()).error?.message || ''; } catch (e) { /* 本文なし */ }
-  const msg = res.status === 429 ? `${service} の無料枠の上限（回数制限）に当たりました。1分ほど待ってからもう一度試してください。続く場合は今日の上限です（進行は保存済み）。`
-    : res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404 ? `${service} のAPIキーかモデル名が正しくないようです。設定を確認してください。`
-    : res.status >= 500 ? `${service} 側が混み合っているようです。少し待ってからもう一度試してください。`
-    : `${service} API エラー（${res.status}）`;
+  let err = null;
+  try { err = (await res.json()).error || null; } catch (e) { /* 本文なし */ }
+  const apiMsg = err?.message || '';
+  let msg;
+  if (res.status === 429) {
+    const q = service === 'Gemini' ? quotaKind(err) : { kind: '', sec: NaN };
+    if (q.kind === 'day') msg = `${service}（${model}）の今日の利用上限に達しました。上限は ${nextPacificMidnight()} ごろ（太平洋時間の0時）にリセットされます。進行は保存済みです。設定で別のモデルに切り替えるか、Groq のキーを入れると続けられます。`;
+    else if (q.kind === 'minute') msg = `${service} の1分あたりの上限に当たりました。${q.sec ? q.sec + '秒' : '1分'}ほど待ってからもう一度試してください。`;
+    else msg = `${service} の無料枠の上限に当たりました。1分ほど待ってからもう一度試し、続く場合は今日の上限です（${service === 'Gemini' ? nextPacificMidnight() + 'ごろリセット・' : ''}進行は保存済み）。`;
+  } else {
+    msg = res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404 ? `${service} のAPIキーかモデル名が正しくないようです。設定を確認してください。`
+      : res.status >= 500 ? `${service} 側が混み合っているようです。少し待ってからもう一度試してください。`
+      : `${service} API エラー（${res.status}）`;
+  }
   return new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
 }
 
