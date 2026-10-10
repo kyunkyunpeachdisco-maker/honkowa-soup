@@ -1,0 +1,13 @@
+{
+  "id": "museum-canary-resuscitator",
+  "status": "verified",
+  "source": {
+    "type": "museum",
+    "title": "Science and Industry Museum Blog: The canary resuscitator",
+    "url": "https://blog.scienceandindustrymuseum.org.uk/canary-resuscitator/"
+  },
+  "puzzle_type": "逆効果",
+  "difficulty": "初級",
+  "title": "閉じ込めて助ける鳥かご",
+  "question_text": "ある鳥かごには、鳥が弱ったときに扉を閉じる仕組みが付いていた。これは、鳥を助けるための仕組みだった。\nこの鳥は何のために使われ、扉を閉じたあと、どうやって助けられたのか？"
+}

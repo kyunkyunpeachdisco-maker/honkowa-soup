@@ -1,0 +1,13 @@
+{
+  "id": "ntsb-era18ma099",
+  "status": "verified",
+  "source": {
+    "type": "ntsb",
+    "title": "NTSB ERA18MA099",
+    "url": "https://www.ntsb.gov/investigations/pages/ERA18MA099.aspx"
+  },
+  "puzzle_type": "逆効果",
+  "difficulty": "上級",
+  "title": "川に落ちたヘリコプター",
+  "question_text": "ヘリコプターが川に不時着して転覆した。操縦士は脱出して軽傷だったが、乗客5人は全員死亡した。\nなぜ不時着することになり、なぜ操縦士だけが脱出できたのか？"
+}
