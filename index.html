@@ -271,7 +271,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.7';
+const APP_VERSION = 'v0.1.8';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -305,11 +305,14 @@ class ApiError extends Error {
   constructor(message, status, detail = '') { super(message); this.status = status; this.detail = detail; }
 }
 // 太平洋時間の次の0時（Gemini の1日あたりの上限がリセットされる時刻）を、端末の時刻で表す
-function nextPacificMidnight() {
+function nextPacificMidnightDate() {
   const now = new Date();
   const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
   const next = new Date(pt); next.setHours(24, 0, 0, 0);
-  return new Date(now.getTime() + (next - pt)).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  return new Date(now.getTime() + (next - pt));
+}
+function nextPacificMidnight() {
+  return nextPacificMidnightDate().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
 
 // 429 の中身（Gemini は details に QuotaFailure / RetryInfo を返す）から、1分の上限か1日の上限かを見分ける
@@ -327,9 +330,10 @@ async function httpError(res, service, model) {
   let err = null;
   try { err = (await res.json()).error || null; } catch (e) { /* 本文なし */ }
   const apiMsg = err?.message || '';
-  let msg;
+  let msg, quota = '';
   if (res.status === 429) {
     const q = service === 'Gemini' ? quotaKind(err) : { kind: '', sec: NaN };
+    quota = q.kind;
     if (q.kind === 'day') msg = `${service}（${model}）の今日の利用上限に達しました。上限は ${nextPacificMidnight()} ごろ（太平洋時間の0時）にリセットされます。進行は保存済みです。設定で別のモデルに切り替えるか、Groq のキーを入れると続けられます。`;
     else if (q.kind === 'minute') msg = `${service} の1分あたりの上限に当たりました。${q.sec ? q.sec + '秒' : '1分'}ほど待ってからもう一度試してください。`;
     else msg = `${service} の無料枠の上限に当たりました。1分ほど待ってからもう一度試し、続く場合は今日の上限です（${service === 'Gemini' ? nextPacificMidnight() + 'ごろリセット・' : ''}進行は保存済み）。`;
@@ -338,7 +342,9 @@ async function httpError(res, service, model) {
       : res.status >= 500 ? `${service} 側が混み合っているようです。少し待ってからもう一度試してください。`
       : `${service} API エラー（${res.status}）`;
   }
-  return new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
+  const e = new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
+  e.quota = quota;
+  return e;
 }
 
 function parseJsonReply(text, detail) {
@@ -368,16 +374,49 @@ async function callGroq(system, prompt, temperature, model) {
 
 // role: 'gm'（審判）| 'rival'（AIプレイヤー）。Groq のキーと「使い方」の設定に応じて振り分け、
 // Gemini が回数制限（429）に当たったら Groq に切り替える
+// 上限に当たったときに順に試す Gemini のモデル（上から質が高い）
+const GEMINI_CHAIN = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+const MODEL_LABEL = { 'gemini-3.8-flash': '3.8 Flash', 'gemini-3.6-flash': '3.6 Flash', 'gemini-3.5-flash-lite': '3.5 Flash-Lite' };
+// 今日の上限に達したモデル → リセット時刻（ミリ秒）。リセットを過ぎたら再び使う
+const exhausted = load('exhausted', {});
+function isExhausted(model) { return exhausted[model] && exhausted[model] > Date.now(); }
+// 切り替えが起きたことを画面に出す（対戦画面の履歴の下に表示）
+const modelNotes = { gm: '', rival: '' };
+function noteFallback(role, text) {
+  modelNotes[role] = text;
+  setStatus(text.replace(/。$/, '…'));
+}
+
 async function callAI(role, system, prompt, temperature) {
   const groq = !!settings.groqKey;
   const useGroqFirst = groq && (settings.groqUse === 'all' || (settings.groqUse === 'rival' && role === 'rival'));
   if (useGroqFirst) return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
-  try {
-    return await callGemini(system, prompt, temperature, role === 'rival' ? settings.rivalModel : settings.model);
-  } catch (e) {
-    if (groq && e.status === 429) return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
-    throw e;
+  const first = role === 'rival' ? settings.rivalModel : settings.model;
+  // 設定したモデルから始め、上限に当たったらそれより軽いモデルへ順に下げる
+  const start = Math.max(0, GEMINI_CHAIN.indexOf(first));
+  const chain = [first, ...GEMINI_CHAIN.slice(start + 1).filter(m => m !== first)];
+  const who = role === 'rival' ? 'AIプレイヤー' : '審判';
+  let lastErr = null;
+  for (const model of chain) {
+    if (isExhausted(model)) continue;
+    try {
+      const r = await callGemini(system, prompt, temperature, model);
+      if (model !== first) noteFallback(role, `${MODEL_LABEL[first] || first} が上限のため、${who}は ${MODEL_LABEL[model] || model} で動いています（判定の精度は少し下がります）。`);
+      else modelNotes[role] = '';
+      return r;
+    } catch (e) {
+      if (e.status !== 429) throw e;
+      lastErr = e;
+      if (e.quota === 'day') { exhausted[model] = nextPacificMidnightDate().getTime(); save('exhausted', exhausted); }
+    }
   }
+  if (groq) {
+    noteFallback(role, `Gemini がすべて上限のため、${who}は Groq（${GROQ_MODELS[role]}）で動いています。`);
+    return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
+  }
+  if (lastErr && !chain.every(isExhausted)) throw lastErr;
+  // すべて今日の上限に達していて試せるモデルが無い
+  throw new ApiError(`Gemini の全モデルが今日の利用上限に達しています。${nextPacificMidnight()} ごろ（太平洋時間の0時）にリセットされます。進行は保存済みです。Groq のキーを入れると続けられます。`, 429, `上限：${chain.join(', ')}`);
 }
 
 async function callGemini(system, prompt, temperature, model = settings.model) {
@@ -617,6 +656,7 @@ function renderGame() {
     if (m.discovery) d.appendChild(el('div', 'found', '重要な事実を発見！'));
     h.appendChild(d);
   });
+  ['gm', 'rival'].forEach(r => { if (modelNotes[r] && !busy) h.appendChild(el('p', 'system', modelNotes[r])); });
   if (lastError && !busy) renderError(h);
   if (busy) {
     const st = el('div', 'status');
