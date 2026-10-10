@@ -137,6 +137,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
   border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; margin-right: 7px;
 }
 .step .req { color: var(--bad); font-size: 13px; }
+.step .opt { color: var(--sub); font-size: 13px; font-weight: normal; }
 .step ol { margin: 0 0 8px; padding-left: 1.3em; font-size: 14px; }
 .step ol li { margin-bottom: 6px; }
 .step .url { font-size: 12px; color: var(--sub); }
@@ -188,7 +189,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   <div class="modal">
     <h2>セットアップ</h2>
     <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。遊ぶには Gemini のAPIキーが1つ必要です。<br>
-    キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先はGoogleのAPIだけです。</p>
+    回数が足りないときの予備として、Groq のキーも任意で追加できます。<br>
+    キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先は Google（と、入れた場合は Groq）の API だけです。</p>
 
     <section class="step">
       <h3><span class="num">1</span>Gemini APIキー<span class="req">（必須）</span></h3>
@@ -232,7 +234,27 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     </section>
 
     <section class="step">
-      <h3><span class="num">3</span>「保存」を押す</h3>
+      <h3><span class="num">3</span>Groq APIキー<span class="opt">（任意・回数が足りないときの予備）</span></h3>
+      <p class="note">Gemini の無料枠は回数制限に当たりやすいため、別の無料AI「Groq」のキーも入れておくと、遊べる回数が増えます。入れなくても遊べます。</p>
+      <ol>
+        <li><a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq の API Keys 画面</a>を開く（Google アカウントなどでログイン）<br>
+            <span class="url">https://console.groq.com/keys</span></li>
+        <li>「Create API Key」を押し、名前（例：<code>honkowa-soup</code>）を入れて作成する</li>
+        <li>表示された <code>gsk_…</code> をコピーして下に貼る<br>
+            <span class="url">この画面を閉じるとキーは二度と表示されません。控え損ねたら作り直してください。</span></li>
+      </ol>
+      <input type="password" id="set-groq-key" placeholder="gsk_…（空欄なら使いません）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label>Groq の使い方
+      <select id="set-groq-use">
+        <option value="fallback">予備：Gemini が回数制限に当たったときだけ使う（おすすめ）</option>
+        <option value="rival">AIプレイヤーは常に Groq、審判は Gemini（上限時は Groq）</option>
+        <option value="all">審判も AIプレイヤーも Groq</option>
+      </select></label>
+      <p class="note">無料・カード登録不要。モデルは審判が <code>gpt-oss-120b</code>、AIプレイヤーが <code>gpt-oss-20b</code> です。キーはこの端末のブラウザ内にのみ保存され、送信先は Groq の API だけです。</p>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">4</span>「保存」を押す</h3>
       <p class="note">別の端末で遊ぶときは、その端末でも同じキーを入れてください。</p>
     </section>
 
@@ -249,7 +271,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.5';
+const APP_VERSION = 'v0.1.6';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -264,7 +286,8 @@ function save(key, value) {
   }
 }
 
-const settings = { key: load('gemini-api-key', ''), model: load('model', 'gemini-3.8-flash'), rivalModel: load('rival-model', 'gemini-3.5-flash-lite') };
+const settings = { key: load('gemini-api-key', ''), model: load('model', 'gemini-3.8-flash'), rivalModel: load('rival-model', 'gemini-3.5-flash-lite'), groqKey: load('groq-api-key', ''), groqUse: load('groq-use', 'fallback') };
+const GROQ_MODELS = { gm: 'openai/gpt-oss-120b', rival: 'openai/gpt-oss-20b' };
 
 // ---- 問題データ ----
 let puzzles = [];
@@ -281,6 +304,55 @@ class ApiError extends Error {
   // detail: 原因調査用の補足（モデル名・HTTPステータス・APIのエラー文など）。画面に小さく出す
   constructor(message, status, detail = '') { super(message); this.status = status; this.detail = detail; }
 }
+async function httpError(res, service, model) {
+  let apiMsg = '';
+  try { apiMsg = (await res.json()).error?.message || ''; } catch (e) { /* 本文なし */ }
+  const msg = res.status === 429 ? `${service} の無料枠の上限（回数制限）に当たりました。1分ほど待ってからもう一度試してください。続く場合は今日の上限です（進行は保存済み）。`
+    : res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404 ? `${service} のAPIキーかモデル名が正しくないようです。設定を確認してください。`
+    : res.status >= 500 ? `${service} 側が混み合っているようです。少し待ってからもう一度試してください。`
+    : `${service} API エラー（${res.status}）`;
+  return new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
+}
+
+function parseJsonReply(text, detail) {
+  try { return JSON.parse(text.replace(/^```(json)?\s*|\s*```$/g, '')); }
+  catch (e) { throw new ApiError('AIの返答を読み取れませんでした。もう一度試してください。', -1, `${detail} / ${text.slice(0, 80) || '（空の返答）'}`); }
+}
+
+async function callGroq(system, prompt, temperature, model) {
+  let res;
+  try {
+    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.groqKey}` },
+      body: JSON.stringify({
+        model, temperature,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      }),
+    });
+  } catch (e) {
+    throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
+  }
+  if (!res.ok) throw await httpError(res, 'Groq', model);
+  const json = await res.json();
+  return parseJsonReply(json.choices?.[0]?.message?.content || '', model);
+}
+
+// role: 'gm'（審判）| 'rival'（AIプレイヤー）。Groq のキーと「使い方」の設定に応じて振り分け、
+// Gemini が回数制限（429）に当たったら Groq に切り替える
+async function callAI(role, system, prompt, temperature) {
+  const groq = !!settings.groqKey;
+  const useGroqFirst = groq && (settings.groqUse === 'all' || (settings.groqUse === 'rival' && role === 'rival'));
+  if (useGroqFirst) return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
+  try {
+    return await callGemini(system, prompt, temperature, role === 'rival' ? settings.rivalModel : settings.model);
+  } catch (e) {
+    if (groq && e.status === 429) return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
+    throw e;
+  }
+}
+
 async function callGemini(system, prompt, temperature, model = settings.model) {
   if (!settings.key) { openSettings(); throw new ApiError('APIキーが未設定です', 0); }
   let res;
@@ -297,24 +369,13 @@ async function callGemini(system, prompt, temperature, model = settings.model) {
   } catch (e) {
     throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
   }
-  if (!res.ok) {
-    let apiMsg = '';
-    try { apiMsg = (await res.json()).error?.message || ''; } catch (e) { /* 本文なし */ }
-    const msg = res.status === 429 ? '無料枠の上限（回数制限）に当たりました。1分ほど待ってからもう一度試してください。続く場合は今日の上限です（進行は保存済み）。'
-      : res.status === 400 || res.status === 403 || res.status === 404 ? 'APIキーかモデル名が正しくないようです。設定を確認してください。'
-      : res.status >= 500 ? 'Gemini側が混み合っているようです。少し待ってからもう一度試してください。'
-      : `Gemini API エラー（${res.status}）`;
-    throw new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
-  }
+  if (!res.ok) throw await httpError(res, 'Gemini', model);
   const json = await res.json();
   const cand = json.candidates?.[0];
   const parts = cand?.content?.parts || [];
   const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
-  try { return JSON.parse(text.replace(/^```(json)?\s*|\s*```$/g, '')); }
-  catch (e) {
-    const why = cand?.finishReason || json.promptFeedback?.blockReason || '';
-    throw new ApiError('AIの返答を読み取れませんでした。もう一度試してください。', -1, `${model}${why ? ' / ' + why : ''} / ${text.slice(0, 80) || '（空の返答）'}`);
-  }
+  const why = cand?.finishReason || json.promptFeedback?.blockReason || '';
+  return parseJsonReply(text, `${model}${why ? ' / ' + why : ''}`);
 }
 
 function historyText(game) {
@@ -354,7 +415,7 @@ ${text}
 7. 今回の質問と回答で、まだ発見されていない発見点のどれかの「要点」（その事実が真相の中で果たす役割）が確かめられたなら、その id を discovery に1つだけ入れる。文中の細部（物の名前・数字など）まですべて一致していなくてよい（例：発見点「マーカーのにおいが異臭として感じられ、緊急事態宣言につながった」に対し「異臭が発生したから宣言したのですか？→はい」は付与してよい）。ただし「遊んでいた？」のように、どの発見点の要点にも届かない広い質問には付けない。該当しなければ null
 
 形式：{"kind":"question|answer_like","answer":"はい|いいえ|部分的にはい|どちらとも言えない|関係ありません|資料では不明|既出です","discovery":"d1など|null"}`;
-    const r = await callGemini(GM_SYSTEM, prompt, 0);
+    const r = await callAI('gm', GM_SYSTEM, prompt, 0);
     const answers = ['はい', 'いいえ', '部分的にはい', 'どちらとも言えない', '関係ありません', '資料では不明', '既出です'];
     const label = answers.includes(r.answer) ? r.answer : '資料では不明';
     let discovery = typeof r.discovery === 'string' ? r.discovery : null;
@@ -369,7 +430,7 @@ ${text}
 
 この解答が【正解条件】の「必須」要素をすべて押さえているか判定してください。言い回しや細かさの違いは問わず、意味が合っていれば満たしたとみなす。必須以外の細部（数字・人名・補足の事実）が抜けていても正解。必須要素が1つでも欠けているか、資料と食い違う内容が含まれていれば不正解。
 形式：{"correct":true|false,"reason":"判定理由（答え合わせ画面でのみ表示）"}`;
-  const r = await callGemini(GM_SYSTEM, prompt, 0);
+  const r = await callAI('gm', GM_SYSTEM, prompt, 0);
   return { correct: r.correct === true, reason: String(r.reason || '') };
 }
 
@@ -388,11 +449,11 @@ async function rivalMove(game, onRetry) {
   const canAnswer = confirmed >= RIVAL_MIN_CONFIRMED;
   const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。`;
   const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】あなた（AIプレイヤー）${s.rival}点、人間プレイヤー${s.you}点${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
-  let r = await callGemini(RIVAL_SYSTEM, prompt, 0.7, settings.rivalModel);
+  let r = await callAI('rival', RIVAL_SYSTEM, prompt, 0.7);
   // 解答できない段階で解答を返したら、質問を出し直させる（質問扱いにすると審判が解答とみなして素通りするため）
   for (let i = 0; i < 2 && !canAnswer && r.type === 'answer'; i++) {
     if (onRetry) onRetry();
-    r = await callGemini(RIVAL_SYSTEM, prompt + '\n\n解答は禁止です。「はい／いいえ」で答えられる質問を1つだけ返してください。', 0.7, settings.rivalModel);
+    r = await callAI('rival', RIVAL_SYSTEM, prompt + '\n\n解答は禁止です。「はい／いいえ」で答えられる質問を1つだけ返してください。', 0.7);
   }
   if (!canAnswer && r.type === 'answer') throw new ApiError('AIプレイヤーの手を読み取れませんでした。もう一度試してください。', -1);
   const type = r.type === 'answer' ? 'answer' : 'question';
@@ -846,16 +907,21 @@ function openSettings() {
   document.getElementById('set-key').value = settings.key;
   document.getElementById('set-model').value = settings.model;
   document.getElementById('set-rival-model').value = settings.rivalModel;
+  document.getElementById('set-groq-key').value = settings.groqKey;
+  document.getElementById('set-groq-use').value = settings.groqUse;
   document.getElementById('set-error').textContent = '';
   document.getElementById('settings').classList.remove('hidden');
 }
 function closeSettings() { document.getElementById('settings').classList.add('hidden'); }
 document.getElementById('set-save').onclick = () => {
   const key = document.getElementById('set-key').value.trim();
-  if (!key) { document.getElementById('set-error').textContent = 'APIキーを入力してください'; return; }
+  if (!key && !document.getElementById('set-groq-key').value.trim()) { document.getElementById('set-error').textContent = 'Gemini のAPIキーを入力してください'; return; }
   settings.key = key; settings.model = document.getElementById('set-model').value;
   settings.rivalModel = document.getElementById('set-rival-model').value;
+  settings.groqKey = document.getElementById('set-groq-key').value.trim();
+  settings.groqUse = document.getElementById('set-groq-use').value;
   save('gemini-api-key', settings.key); save('model', settings.model); save('rival-model', settings.rivalModel);
+  save('groq-api-key', settings.groqKey); save('groq-use', settings.groqUse);
   closeSettings();
 };
 document.getElementById('set-cancel').onclick = closeSettings;
