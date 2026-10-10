@@ -271,7 +271,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.8';
+const APP_VERSION = 'v0.1.9';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -396,22 +396,24 @@ async function callAI(role, system, prompt, temperature) {
   const start = Math.max(0, GEMINI_CHAIN.indexOf(first));
   const chain = [first, ...GEMINI_CHAIN.slice(start + 1).filter(m => m !== first)];
   const who = role === 'rival' ? 'AIプレイヤー' : '審判';
-  let lastErr = null;
+  let lastErr = null, reason = '上限';
   for (const model of chain) {
     if (isExhausted(model)) continue;
     try {
       const r = await callGemini(system, prompt, temperature, model);
-      if (model !== first) noteFallback(role, `${MODEL_LABEL[first] || first} が上限のため、${who}は ${MODEL_LABEL[model] || model} で動いています（判定の精度は少し下がります）。`);
+      if (model !== first) noteFallback(role, `${MODEL_LABEL[first] || first} が${reason}のため、${who}は ${MODEL_LABEL[model] || model} で動いています（判定の精度は少し下がります）。`);
       else modelNotes[role] = '';
       return r;
     } catch (e) {
-      if (e.status !== 429) throw e;
+      // 回数の上限（429）と、Gemini 側の混雑・障害（5xx）は次のモデルで試す。それ以外（キー誤りなど）はそのまま止める
+      if (e.status !== 429 && !(e.status >= 500)) throw e;
       lastErr = e;
+      reason = e.status === 429 ? '上限' : '混雑中';
       if (e.quota === 'day') { exhausted[model] = nextPacificMidnightDate().getTime(); save('exhausted', exhausted); }
     }
   }
   if (groq) {
-    noteFallback(role, `Gemini がすべて上限のため、${who}は Groq（${GROQ_MODELS[role]}）で動いています。`);
+    noteFallback(role, `Gemini が${reason === '上限' ? 'すべて上限' : '混雑・上限'}のため、${who}は Groq（${GROQ_MODELS[role]}）で動いています。`);
     return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
   }
   if (lastErr && !chain.every(isExhausted)) throw lastErr;
