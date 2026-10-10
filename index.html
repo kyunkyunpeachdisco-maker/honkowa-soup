@@ -91,6 +91,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .composer .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .composer .hint { font-size: 12px; color: var(--sub); flex: 1; }
 .thinking { font-size: 13px; color: var(--sub); }
+.error-detail { font-size: 11px; color: var(--sub); margin-top: 4px; word-break: break-all; }
 .status { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sub); background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
 .status #status-label { flex: 1; min-width: 0; }
 .status .status-time { font-size: 12px; white-space: nowrap; }
@@ -248,7 +249,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.4';
+const APP_VERSION = 'v0.1.5';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -277,11 +278,14 @@ async function loadAnswer(id) {
 
 // ---- Gemini 呼び出し（画面・進行からは askGM / rivalMove だけを使う） ----
 class ApiError extends Error {
-  constructor(message, status) { super(message); this.status = status; }
+  // detail: 原因調査用の補足（モデル名・HTTPステータス・APIのエラー文など）。画面に小さく出す
+  constructor(message, status, detail = '') { super(message); this.status = status; this.detail = detail; }
 }
 async function callGemini(system, prompt, temperature, model = settings.model) {
   if (!settings.key) { openSettings(); throw new ApiError('APIキーが未設定です', 0); }
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  let res;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.key },
     body: JSON.stringify({
@@ -289,18 +293,28 @@ async function callGemini(system, prompt, temperature, model = settings.model) {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature },
     }),
-  });
+    });
+  } catch (e) {
+    throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
+  }
   if (!res.ok) {
-    const msg = res.status === 429 ? '無料枠の上限に達しました。しばらく待ってから「再開」してください（進行は保存済みです）。'
-      : res.status === 400 || res.status === 403 ? 'APIキーかモデル名が正しくないようです。設定を確認してください。'
+    let apiMsg = '';
+    try { apiMsg = (await res.json()).error?.message || ''; } catch (e) { /* 本文なし */ }
+    const msg = res.status === 429 ? '無料枠の上限（回数制限）に当たりました。1分ほど待ってからもう一度試してください。続く場合は今日の上限です（進行は保存済み）。'
+      : res.status === 400 || res.status === 403 || res.status === 404 ? 'APIキーかモデル名が正しくないようです。設定を確認してください。'
+      : res.status >= 500 ? 'Gemini側が混み合っているようです。少し待ってからもう一度試してください。'
       : `Gemini API エラー（${res.status}）`;
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, `${model} / HTTP ${res.status}${apiMsg ? ' / ' + apiMsg.slice(0, 200) : ''}`);
   }
   const json = await res.json();
-  const parts = json.candidates?.[0]?.content?.parts || [];
+  const cand = json.candidates?.[0];
+  const parts = cand?.content?.parts || [];
   const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
   try { return JSON.parse(text.replace(/^```(json)?\s*|\s*```$/g, '')); }
-  catch (e) { throw new ApiError('AIの返答を読み取れませんでした。もう一度試してください。', -1); }
+  catch (e) {
+    const why = cand?.finishReason || json.promptFeedback?.blockReason || '';
+    throw new ApiError('AIの返答を読み取れませんでした。もう一度試してください。', -1, `${model}${why ? ' / ' + why : ''} / ${text.slice(0, 80) || '（空の返答）'}`);
+  }
 }
 
 function historyText(game) {
@@ -402,6 +416,7 @@ function saveGame() {
 }
 
 async function startPuzzle(puzzle) {
+  lastError = null;
   const all = load('games', {});
   game = all[puzzle.id] && !all[puzzle.id].finished ? all[puzzle.id] : newGame(puzzle);
   game.puzzle = puzzle;
@@ -514,6 +529,7 @@ function renderGame() {
     if (m.discovery) d.appendChild(el('div', 'found', '重要な事実を発見！'));
     h.appendChild(d);
   });
+  if (lastError && !busy) renderError(h);
   if (busy) {
     const st = el('div', 'status');
     st.appendChild(el('span', 'spinner'));
@@ -532,6 +548,7 @@ function renderGame() {
 let statusLabel = '', statusStart = 0, statusTimer = null;
 function setBusy(on, label) {
   busy = on;
+  if (on) lastError = null;
   clearInterval(statusTimer);
   if (on) {
     statusLabel = label; statusStart = Date.now();
@@ -554,17 +571,23 @@ function updateStatusTime() {
   e.textContent = sec >= 30 ? `${sec}秒・通信に時間がかかっています` : `${sec}秒`;
 }
 
+// 最後のエラー。renderGame で履歴を描き直しても消えないよう状態として持ち、次の操作を始めたら消す
+let lastError = null;
 function showError(e, rivalRetry) {
-  const h = document.getElementById('history');
-  const p = el('p', 'system error', e.message || String(e));
-  if (rivalRetry) {
+  lastError = { message: e.message || String(e), detail: e.detail || '', rivalRetry: !!rivalRetry };
+  if (game) renderGame();
+}
+function renderError(h) {
+  const box = el('div', 'system error');
+  box.appendChild(el('div', '', lastError.message));
+  if (lastError.detail) box.appendChild(el('div', 'error-detail', lastError.detail));
+  if (lastError.rivalRetry) {
     const b = el('button', '', '再開');
-    b.style.marginLeft = '8px';
-    b.onclick = () => { p.remove(); runRival(); };
-    p.appendChild(b);
+    b.style.marginTop = '6px';
+    b.onclick = () => { lastError = null; runRival(); };
+    box.appendChild(b);
   }
-  h.appendChild(p);
-  h.scrollTop = h.scrollHeight;
+  h.appendChild(box);
 }
 
 function resultSummary() {
