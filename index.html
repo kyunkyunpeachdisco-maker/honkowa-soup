@@ -111,6 +111,10 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .log-table td:first-child { white-space: nowrap; color: var(--sub); width: 1%; padding-right: 12px; }
 .result-title { font-size: 14px; color: var(--sub); margin-bottom: 4px; }
 .export { margin-top: 24px; }
+.badge-custom { background: var(--accent); color: var(--accent-ink); }
+.card-ops { display: flex; gap: 8px; margin-top: 8px; }
+.card-ops button { font-size: 13px; padding: 4px 10px; }
+#add-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-family: ui-monospace, Menlo, monospace; }
 .export-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .export-row button { font-size: 14px; padding: 6px 12px; }
 @media print {
@@ -158,6 +162,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
     <div id="puzzle-list"></div>
+    <p><button id="btn-add-puzzle">＋ 問題を追加（貼り付け）</button></p>
     <p class="version" id="version-list"></p>
   </main>
   <div id="view-game" class="hidden" style="flex:1; min-height:0;">
@@ -183,6 +188,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     </div>
   </div>
   <main id="view-reveal" class="hidden reveal"></main>
+</div>
+
+<div id="add-puzzle" class="overlay hidden">
+  <div class="modal">
+    <h2>問題を追加</h2>
+    <p class="note">問題データ（JSON）を貼り付けてください。追加した問題はこの端末に保存され、一覧の「共有」から友達にリンクで渡せます。</p>
+    <textarea id="add-puzzle-text" rows="10" placeholder='{"title": "…", "question_text": "…", "source": {...}, "answer": {...}}'></textarea>
+    <p class="error" id="add-puzzle-error"></p>
+    <div class="row">
+      <button id="add-puzzle-cancel">閉じる</button>
+      <button id="add-puzzle-ok" class="primary">追加</button>
+    </div>
+  </div>
 </div>
 
 <div id="settings" class="overlay hidden">
@@ -271,7 +289,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.10';
+const APP_VERSION = 'v0.1.11';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -293,10 +311,69 @@ const GROQ_MODELS = { gm: 'openai/gpt-oss-120b', rival: 'openai/gpt-oss-20b' };
 let puzzles = [];
 async function loadPuzzles() {
   const ids = await (await fetch('puzzles/index.json')).json();
-  puzzles = await Promise.all(ids.map(id => fetch(`puzzles/${id}.json`).then(r => r.json())));
+  const bundled = await Promise.all(ids.map(id => fetch(`puzzles/${id}.json`).then(r => r.json())));
+  puzzles = [...bundled, ...loadCustom().map(c => ({ ...c.pub, custom: true }))];
 }
 async function loadAnswer(id) {
+  const c = loadCustom().find(x => x.pub.id === id);
+  if (c) return c.answer;
   return (await fetch(`answers/${id}.json`)).json();
+}
+
+// ---- 追加した問題（端末内に保存） ----
+// 受け付ける形式：公開部分（id・title・question_text・source・puzzle_type・difficulty）と、
+// answer（answer_criteria・discoveries・reference_facts・reveal）。answer の中身が最上位に並んでいても受け付ける
+function loadCustom() { return load('custom-puzzles', []); }
+function saveCustom(list) { save('custom-puzzles', list); }
+
+function parsePuzzleText(text) {
+  const t = text.trim().replace(/^```(json)?\s*|\s*```$/g, '');
+  let d;
+  try { d = JSON.parse(t); } catch (e) { throw new Error('問題データ（JSON）として読み取れませんでした。貼り付けた内容を確認してください。'); }
+  return normalizePuzzle(d);
+}
+function normalizePuzzle(d) {
+  if (!d || typeof d !== 'object') throw new Error('問題データの形式が正しくありません。');
+  const a = d.answer && typeof d.answer === 'object' ? d.answer : d;
+  const missing = [];
+  if (!d.question_text) missing.push('question_text（問題文）');
+  if (!a.answer_criteria) missing.push('answer_criteria（正解条件）');
+  if (!Array.isArray(a.discoveries) || !a.discoveries.length) missing.push('discoveries（重要な事実）');
+  if (!Array.isArray(a.reference_facts) || !a.reference_facts.length) missing.push('reference_facts（審判用の資料）');
+  if (!a.reveal || !a.reveal.summary) missing.push('reveal.summary（真相）');
+  if (!d.source || !d.source.url) missing.push('source.url（出典）');
+  if (missing.length) throw new Error('次の項目が足りません：' + missing.join('、'));
+  const title = String(d.title || d.question_text.slice(0, 16));
+  const id = String(d.id || 'custom-' + Date.now().toString(36)).replace(/[^\w-]/g, '-').slice(0, 60);
+  return {
+    pub: {
+      id, title, status: d.status || 'unverified',
+      source: { type: d.source.type || 'web', title: String(d.source.title || d.source.url), url: String(d.source.url) },
+      puzzle_type: d.puzzle_type || '追加', difficulty: d.difficulty || '中級',
+      question_text: String(d.question_text),
+    },
+    answer: {
+      answer_criteria: String(a.answer_criteria),
+      discoveries: a.discoveries.map((x, i) => ({ id: String(x.id || 'd' + (i + 1)), fact: String(x.fact || x), evidence: String(x.evidence || '') })),
+      reference_facts: a.reference_facts.map(x => ({ fact: String(x.fact || x), layer: String(x.layer || 'confirmed') })),
+      reveal: { summary: String(a.reveal.summary), causal_chain: Array.isArray(a.reveal.causal_chain) ? a.reveal.causal_chain.map(String) : [] },
+    },
+  };
+}
+// 追加して保存する。同梱の問題と id が重なったら別の id にする。同じ id の追加済み問題は置き換える
+function addCustomPuzzle(pkg) {
+  const list = loadCustom();
+  if (puzzles.some(p => !p.custom && p.id === pkg.pub.id)) pkg.pub.id += '-' + Date.now().toString(36);
+  const i = list.findIndex(c => c.pub.id === pkg.pub.id);
+  if (i >= 0) list[i] = pkg; else list.push(pkg);
+  saveCustom(list);
+  puzzles = [...puzzles.filter(p => p.id !== pkg.pub.id), { ...pkg.pub, custom: true }];
+  return pkg.pub;
+}
+function removeCustomPuzzle(id) {
+  saveCustom(loadCustom().filter(c => c.pub.id !== id));
+  puzzles = puzzles.filter(p => p.id !== id);
+  const all = load('games', {}); delete all[id]; save('games', all);
 }
 
 // ---- Gemini 呼び出し（画面・進行からは askGM / rivalMove だけを使う） ----
@@ -909,6 +986,40 @@ function unb64url(str) {
 async function pipeBytes(bytes, stream) {
   return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
 }
+async function encodeJson(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  if (window.CompressionStream) return 'z' + b64url(await pipeBytes(bytes, new CompressionStream('deflate-raw')));
+  return 'j' + b64url(bytes);
+}
+async function decodeJson(code) {
+  let bytes = unb64url(code.slice(1));
+  if (code[0] === 'z') bytes = await pipeBytes(bytes, new DecompressionStream('deflate-raw'));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+// 問題の共有リンク（答えも入るが、受け取った側の画面には答え合わせまで出さない）
+async function puzzleShareUrl(id) {
+  const c = loadCustom().find(x => x.pub.id === id);
+  return `${location.origin}${location.pathname}#p=${await encodeJson({ ...c.pub, answer: c.answer })}`;
+}
+async function sharePuzzle(id) {
+  const c = loadCustom().find(x => x.pub.id === id);
+  const url = await puzzleShareUrl(id);
+  const text = `本当にあった怖いスープの問題「${c.pub.title}」`;
+  if (navigator.share) {
+    try { await navigator.share({ title: '本当にあった怖いスープ', text, url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  alert(await copyText(url) ? '問題の共有リンクをコピーしました。' : 'コピーできませんでした。');
+}
+async function openSharedPuzzle(code) {
+  history.replaceState(null, '', location.pathname);
+  const pkg = normalizePuzzle(await decodeJson(code));
+  if (!confirm(`問題「${pkg.pub.title}」を追加しますか？\n（答えは答え合わせまで表示されません）`)) return false;
+  const pub = addCustomPuzzle(pkg);
+  startPuzzle(puzzles.find(p => p.id === pub.id));
+  return true;
+}
+
 async function encodeResult() {
   const data = {
     v: 1, p: game.puzzleId, s: [game.scores.you, game.scores.rival], r: game.result, f: game.found,
@@ -957,11 +1068,24 @@ function renderList() {
     const c = el('div', 'card');
     c.appendChild(el('h2', '', p.title));
     const meta = el('div', 'meta');
+    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     const g = all[p.id];
     if (g) meta.appendChild(el('span', '', g.finished ? `済（${g.scores.you}対${g.scores.rival}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
+    if (p.custom) {
+      const ops = el('div', 'card-ops');
+      const sh = el('button', '', '共有');
+      sh.onclick = e => { e.stopPropagation(); sharePuzzle(p.id); };
+      const del = el('button', '', '削除');
+      del.onclick = e => {
+        e.stopPropagation();
+        if (confirm(`「${p.title}」を削除しますか？（この端末から消えます）`)) { removeCustomPuzzle(p.id); renderList(); }
+      };
+      ops.append(sh, del);
+      c.appendChild(ops);
+    }
     c.onclick = () => startPuzzle(p);
     box.appendChild(c);
   });
@@ -998,6 +1122,22 @@ document.getElementById('set-save').onclick = () => {
 };
 document.getElementById('set-cancel').onclick = closeSettings;
 document.getElementById('btn-settings').onclick = openSettings;
+document.getElementById('btn-add-puzzle').onclick = () => {
+  document.getElementById('add-puzzle-text').value = '';
+  document.getElementById('add-puzzle-error').textContent = '';
+  document.getElementById('add-puzzle').classList.remove('hidden');
+};
+document.getElementById('add-puzzle-cancel').onclick = () => document.getElementById('add-puzzle').classList.add('hidden');
+document.getElementById('add-puzzle-ok').onclick = () => {
+  try {
+    const pub = addCustomPuzzle(parsePuzzleText(document.getElementById('add-puzzle-text').value));
+    document.getElementById('add-puzzle').classList.add('hidden');
+    renderList();
+    alert(`「${pub.title}」を追加しました。`);
+  } catch (e) {
+    document.getElementById('add-puzzle-error').textContent = e.message;
+  }
+};
 document.getElementById('btn-back').onclick = showList;
 
 document.getElementById('btn-ask').onclick = () => playerMove('question');
@@ -1035,6 +1175,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   try { await loadPuzzles(); }
   catch (e) { document.getElementById('puzzle-list').appendChild(el('p', 'error', '問題を読み込めませんでした。')); return; }
   ['version-list', 'version-settings'].forEach(id => document.getElementById(id).textContent = versionLabel);
+  const sharedPuzzle = location.hash.match(/^#p=(.+)$/);
+  if (sharedPuzzle) {
+    try { if (await openSharedPuzzle(sharedPuzzle[1])) return; }
+    catch (e) { alert('問題の共有リンクを読み込めませんでした。'); history.replaceState(null, '', location.pathname); }
+  }
   const shared = location.hash.match(/^#r=(.+)$/);
   if (shared) {
     try { if (await openSharedResult(shared[1])) return; }
