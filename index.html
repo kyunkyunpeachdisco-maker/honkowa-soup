@@ -112,8 +112,13 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .result-title { font-size: 14px; color: var(--sub); margin-bottom: 4px; }
 .export { margin-top: 24px; }
 .badge-custom { background: var(--accent); color: var(--accent-ink); }
+.list-ops { display: flex; gap: 8px; flex-wrap: wrap; }
+#repo-status { white-space: pre-line; }
+.coll { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.coll span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .card-ops { display: flex; gap: 8px; margin-top: 8px; }
 .card-ops button { font-size: 13px; padding: 4px 10px; }
+#gen-theme { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; }
 #add-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-family: ui-monospace, Menlo, monospace; }
 .export-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .export-row button { font-size: 14px; padding: 6px 12px; }
@@ -162,7 +167,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
     <div id="puzzle-list"></div>
-    <p><button id="btn-add-puzzle">＋ 問題を追加（貼り付け）</button></p>
+    <p class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加する</button>
+    <button id="btn-library">問題集の保存・共有</button></p>
+    <p class="note" id="repo-status"></p>
     <p class="version" id="version-list"></p>
   </main>
   <div id="view-game" class="hidden" style="flex:1; min-height:0;">
@@ -192,13 +199,103 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
 <div id="add-puzzle" class="overlay hidden">
   <div class="modal">
-    <h2>問題を追加</h2>
-    <p class="note">問題データ（JSON）を貼り付けてください。追加した問題はこの端末に保存され、一覧の「共有」から友達にリンクで渡せます。</p>
+    <h2>問題を作る・追加する</h2>
+    <div class="step">
+    <h3><span class="num">1</span>Claude に作ってもらう</h3>
+    <p class="note">ボタンを押すと、作り方の指示文（検索先・ルールつき）がコピーされ、Claude が開きます。Claude の入力欄に貼り付けて送ってください。Claude が資料を検索して問題を作ります（Claude のサブスクで動き、APIキーは不要です）。</p>
+    <input id="gen-theme" type="text" placeholder="お題（任意）例：船・医療・発明品">
+    <p><button id="btn-gen-claude" class="primary">指示文をコピーして Claude を開く</button></p>
+    </div>
+    <div class="step">
+    <h3><span class="num">2</span>できた問題を貼り付ける</h3>
+    <p class="note">Claude が返した問題データ（JSON）をそのまま貼り付けて「追加」を押してください。追加した問題はこの端末（データリポジトリを設定していればリポジトリ）に保存され、一覧の「共有」から1問ずつ友達にリンクで渡せます。</p>
     <textarea id="add-puzzle-text" rows="10" placeholder='{"title": "…", "question_text": "…", "source": {...}, "answer": {...}}'></textarea>
     <p class="error" id="add-puzzle-error"></p>
+    </div>
     <div class="row">
       <button id="add-puzzle-cancel">閉じる</button>
       <button id="add-puzzle-ok" class="primary">追加</button>
+    </div>
+  </div>
+</div>
+
+<div id="library" class="overlay hidden">
+  <div class="modal">
+    <h2>問題集の保存・共有</h2>
+    <p class="note">追加した問題は、ふだんはこの端末だけに保存されます（ブラウザのデータ削除や、iPhone で7日使わないと消えることがあります）。<br>
+    GitHub に自分専用の非公開リポジトリ（データリポジトリ）を作っておくと、問題がそこに保存され、別の端末でも同じ問題集を使えます。友達には読み取り専用の招待リンクで問題集を渡せます。</p>
+
+    <section class="step">
+      <h3><span class="num">1</span>データリポジトリを作る<span class="req">（任意）</span></h3>
+      <ol>
+        <li><a href="https://github.com/new?name=honkowa-soup-data&visibility=private" target="_blank" rel="noopener">非公開リポジトリの作成画面</a>を開く（名前 <code>honkowa-soup-data</code> と非公開が入力済み）</li>
+        <li>「Create repository」を押す（README はあってもなくても構いません）</li>
+      </ol>
+      <p class="note">既にあるリポジトリを使う場合は、この手順は飛ばしてください。</p>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">2</span>アクセス用のトークンを発行する</h3>
+      <ol>
+        <li><a href="https://github.com/settings/personal-access-tokens/new?name=honkowa-soup" target="_blank" rel="noopener">トークン（Fine-grained PAT）の発行画面</a>を開く（Token name に <code>honkowa-soup</code> が入力済み）</li>
+        <li>Expiration：<code>90 days</code> か <code>Custom</code> で1年後（切れたら発行し直して貼り直すだけです）</li>
+        <li>Repository access：<code>Only select repositories</code> → 手順1のリポジトリを選ぶ</li>
+        <li>Permissions → Repository permissions：<code>Contents</code> を <code>Read and write</code> にする（ほかは触らない）</li>
+        <li>「Generate token」を押し、表示された <code>github_pat_…</code> をコピー</li>
+      </ol>
+      <p class="note"><b>この画面を閉じるとトークンは二度と表示されません。</b>コピーしてから閉じてください。</p>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">3</span>アプリに設定する</h3>
+      <label>リポジトリ
+      <input type="text" id="lib-repo" placeholder="例: yourname/honkowa-soup-data（URL貼り付けも可）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label>トークン
+      <input type="password" id="lib-pat" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <p class="note">初回の保存時に、リポジトリへ案内ファイル（CLAUDE.md）を自動で作成します（既に CLAUDE.md があれば作りません）。claude.ai/code でこのリポジトリを開いて「問題を作って」と頼むと、Claude が案内ファイルに沿って問題を作り、リポジトリに追加します。アプリには次の起動時に出ます。<br>
+      複数の端末で使うときは、各端末で同じリポジトリとトークンを入れてください。トークンはこの端末のブラウザ内にのみ保存され、送信先は GitHub の API だけです。</p>
+      <p class="error" id="lib-error"></p>
+      <div class="row">
+        <button id="lib-clear">設定を外す</button>
+        <button id="lib-save" class="primary">保存して同期</button>
+      </div>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">4</span>友達に問題集を渡す（招待リンク）</h3>
+      <p class="note">データリポジトリを非公開のまま、友達に読み取り専用で渡せます。友達は GitHub アカウント不要です。</p>
+      <ol>
+        <li><a href="https://github.com/settings/personal-access-tokens/new?name=honkowa-soup-friends" target="_blank" rel="noopener">トークンの発行画面</a>をもう一度開く（Token name に <code>honkowa-soup-friends</code> が入力済み）</li>
+        <li>Repository access：<code>Only select repositories</code> → データリポジトリを選ぶ</li>
+        <li>Permissions → Repository permissions：<code>Contents</code> を <code>Read-only</code> にする（<b>Read and write にしない</b>）</li>
+        <li>「Generate token」→ 表示された <code>github_pat_…</code> を下に貼る</li>
+      </ol>
+      <label>問題集の名前（友達の画面に出ます）
+      <input type="text" id="inv-name" placeholder="例: たろう"></label>
+      <label>読み取り専用トークン
+      <input type="password" id="inv-token" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <p class="note">招待リンクを知っている人は誰でも問題集（答えを含む）を読めます。渡すのをやめたいときは、GitHub でこのトークンを削除してください（リンクが使えなくなります）。</p>
+      <p class="error" id="inv-error"></p>
+      <p><button id="inv-make" class="primary">招待リンクを作る</button></p>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">5</span>読み込んでいる友達の問題集</h3>
+      <div id="lib-collections"></div>
+    </section>
+
+    <section class="step">
+      <h3><span class="num">6</span>ファイルに書き出す・読み込む</h3>
+      <p class="note">追加した問題（友達の問題集も含む）を1つのファイルに書き出せます。バックアップや、ファイルでの受け渡しに使えます。</p>
+      <div class="row">
+        <button id="lib-export">ファイルに書き出す</button>
+        <button id="lib-import">ファイルから読み込む</button>
+      </div>
+      <input type="file" id="lib-file" accept=".json,application/json" class="hidden">
+    </section>
+
+    <div class="row">
+      <button id="lib-close">閉じる</button>
     </div>
   </div>
 </div>
@@ -289,7 +386,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.11';
+const APP_VERSION = 'v0.1.12';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -309,28 +406,55 @@ const GROQ_MODELS = { gm: 'openai/gpt-oss-120b', rival: 'openai/gpt-oss-20b' };
 
 // ---- 問題データ ----
 let puzzles = [];
+let bundled = [];
 async function loadPuzzles() {
   const ids = await (await fetch('puzzles/index.json')).json();
-  const bundled = await Promise.all(ids.map(id => fetch(`puzzles/${id}.json`).then(r => r.json())));
-  puzzles = [...bundled, ...loadCustom().map(c => ({ ...c.pub, custom: true }))];
+  bundled = await Promise.all(ids.map(id => fetch(`puzzles/${id}.json`).then(r => r.json())));
+  rebuildPuzzles();
 }
 async function loadAnswer(id) {
-  const c = loadCustom().find(x => x.pub.id === id);
-  if (c) return c.answer;
+  if (pkgIndex[id]) return pkgIndex[id].pkg.answer;
   return (await fetch(`answers/${id}.json`)).json();
 }
 
-// ---- 追加した問題（端末内に保存） ----
+// ---- 追加した問題 ----
+// 置き場所は3つ：端末内（custom-puzzles。データリポジトリ未設定時、または送信前の控え）、
+// 自分のデータリポジトリ（puzzles/<id>.json）、友達の問題集（招待リンクで受け取った読み取り専用のリポジトリ）。
+// リポジトリの中身は repo-cache に控えておき、起動時に読み直す
 // 受け付ける形式：公開部分（id・title・question_text・source・puzzle_type・difficulty）と、
 // answer（answer_criteria・discoveries・reference_facts・reveal）。answer の中身が最上位に並んでいても受け付ける
 function loadCustom() { return load('custom-puzzles', []); }
 function saveCustom(list) { save('custom-puzzles', list); }
+const myRepo = { repo: load('data-repo', ''), pat: load('github-pat', '') };
+let collections = load('collections', []);   // [{ repo, token, name }]
+let repoCache = load('repo-cache', {});       // { 'owner/repo': [pkg, …] }
+let pkgIndex = {};                            // id → { pkg, from: 'local' | 'mine' | collection }
 
-function parsePuzzleText(text) {
+function rebuildPuzzles() {
+  pkgIndex = {};
+  const add = (pkg, from) => {
+    const id = pkg.pub.id;
+    if (!pkgIndex[id] && !bundled.some(b => b.id === id)) pkgIndex[id] = { pkg, from };
+  };
+  loadCustom().forEach(p => add(p, 'local'));
+  if (myRepo.repo) (repoCache[myRepo.repo] || []).forEach(p => add(p, 'mine'));
+  collections.forEach(c => (repoCache[c.repo] || []).forEach(p => add(p, c)));
+  puzzles = [...bundled, ...Object.values(pkgIndex).map(({ pkg, from }) => ({
+    ...pkg.pub, custom: true, collection: typeof from === 'object' ? from.name : '',
+  }))];
+}
+function pkgFlat(pkg) { return { ...pkg.pub, answer: pkg.answer }; }
+
+function parsePuzzlesText(text) {
   const t = text.trim().replace(/^```(json)?\s*|\s*```$/g, '');
   let d;
   try { d = JSON.parse(t); } catch (e) { throw new Error('問題データ（JSON）として読み取れませんでした。貼り付けた内容を確認してください。'); }
-  return normalizePuzzle(d);
+  const list = Array.isArray(d) ? d : [d];
+  if (!list.length) throw new Error('問題が入っていません。');
+  return list.map((x, i) => {
+    try { return normalizePuzzle(x); }
+    catch (e) { throw new Error((list.length > 1 ? `${i + 1}問目：` : '') + e.message); }
+  });
 }
 function normalizePuzzle(d) {
   if (!d || typeof d !== 'object') throw new Error('問題データの形式が正しくありません。');
@@ -344,7 +468,7 @@ function normalizePuzzle(d) {
   if (!d.source || !d.source.url) missing.push('source.url（出典）');
   if (missing.length) throw new Error('次の項目が足りません：' + missing.join('、'));
   const title = String(d.title || d.question_text.slice(0, 16));
-  const id = String(d.id || 'custom-' + Date.now().toString(36)).replace(/[^\w-]/g, '-').slice(0, 60);
+  const id = String(d.id || 'custom-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)).replace(/[^\w-]/g, '-').slice(0, 60);
   return {
     pub: {
       id, title, status: d.status || 'unverified',
@@ -360,20 +484,293 @@ function normalizePuzzle(d) {
     },
   };
 }
-// 追加して保存する。同梱の問題と id が重なったら別の id にする。同じ id の追加済み問題は置き換える
-function addCustomPuzzle(pkg) {
-  const list = loadCustom();
-  if (puzzles.some(p => !p.custom && p.id === pkg.pub.id)) pkg.pub.id += '-' + Date.now().toString(36);
-  const i = list.findIndex(c => c.pub.id === pkg.pub.id);
-  if (i >= 0) list[i] = pkg; else list.push(pkg);
-  saveCustom(list);
-  puzzles = [...puzzles.filter(p => p.id !== pkg.pub.id), { ...pkg.pub, custom: true }];
-  return pkg.pub;
+// 「Claudeで作る」の検索先（アプリに組み込みの固定リスト。本文を読めることを確認済みのもの）
+const GEN_SOURCES = [
+  { name: 'NASA ASRS CALLBACK（航空安全報告の月報。操縦士・管制官などの体験談）', url: 'https://asrs.arc.nasa.gov/publications/callback.html' },
+  { name: 'NTSB（米国家運輸安全委員会）の事故調査', url: 'https://www.ntsb.gov/investigations/' },
+  { name: 'Science Museum Group のブログ（ロンドン Science Museum／マンチェスター Science and Industry Museum）', url: 'https://blog.sciencemuseum.org.uk/ と https://blog.scienceandindustrymuseum.org.uk/' },
+  { name: 'Imperial War Museums（帝国戦争博物館）の解説記事', url: 'https://www.iwm.org.uk/history' },
+];
+const GEN_EXAMPLE = {
+  id: 'english-lowercase-id',
+  title: '短い題名（真相を明かさない）',
+  question_text: '問題文。不思議な状況だけを書き、最後に「なぜ？」などの問いで終える',
+  source: { type: 'asrs', title: '出典ページの題名', url: 'https://…（実際に読んだページのURL）' },
+  puzzle_type: '意外なつながり', difficulty: '中級',
+  answer: {
+    answer_criteria: '必須：(1)… (2)…。この2点が説明できていれば正解',
+    discoveries: [{ id: 'd1', fact: '真相にたどり着くための重要な事実', evidence: '資料のどこに書いてあるか' }],
+    reference_facts: [{ fact: '資料に書かれた事実（審判が質問に答えるのに使う）', layer: 'confirmed' }],
+    reveal: { summary: '真相の説明（資料に書かれた範囲で）', causal_chain: ['きっかけ', '…', '結果'] },
+  },
+};
+// 作り方（検索先・題材の条件・ルール）。指示文とデータリポジトリの案内ファイルで共用する
+function genRulesText(avoid) {
+  return `## 手順
+1. 次の検索先から、題材になる実際の出来事を Web 検索で探す（ほかのサイトは使わない）
+${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
+2. 候補のページを実際に開いて本文を読み、その1ページに書かれた事実だけで問題を作る
+3. 作り終えたら、問題文・答え・事実のすべてを本文と照らし合わせて、書かれていないことが混ざっていないか確かめる
+
+## 題材の条件
+- 状況は不思議だが、真相を聞くと「なるほど」と納得できる出来事（意外な原因・意外な使い道・意外なつながり）
+- ネットや雑学でよく知られた話は避ける（AIが知識だけで即答できてしまうため）
+- ${avoid}
+
+## 作り方のルール
+- 資料に書かれていない事実を足さない。推測で補わない
+- 問題文には真相の手がかりになる不思議な状況だけを書き、真相そのものは書かない
+- id は英小文字・数字・ハイフンで、題材が分かる短い名前にする
+- answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る
+- discoveries は真相にたどり着くための重要な事実を3〜5個
+- reference_facts は審判が質問に答えるための資料。本文の事実を6〜12個、日本語で。layer は資料にそのまま書かれた事実なら "confirmed"、体験者本人の申告なら "reporter_claim"
+- 文章はすべて日本語`;
 }
-function removeCustomPuzzle(id) {
+function buildGenPrompt(theme) {
+  const titles = puzzles.map(p => `  - ${p.title}（${p.source && p.source.title || ''}）`).join('\n');
+  return `「本当にあった怖いスープ」という水平思考クイズ（ウミガメのスープ形式）の問題を1問作ってください。すべて実際の記録に基づく問題です。
+${theme ? `\nお題：「${theme}」に関係する出来事を優先してください。\n` : ''}
+${genRulesText('次の問題とは別の題材にする：\n' + titles)}
+
+## 出力
+説明は不要です。次の形式のJSONだけを、1つのコードブロックで出力してください。
+\`\`\`json
+${JSON.stringify(GEN_EXAMPLE, null, 2)}
+\`\`\``;
+}
+async function genWithClaude() {
+  // iOS ではタップ直後でないと新しいタブを開けないため、コピーの完了を待たずに開く
+  const copying = copyText(buildGenPrompt(document.getElementById('gen-theme').value.trim()));
+  window.open('https://claude.ai/new', '_blank', 'noopener');
+  const ok = await copying;
+  document.getElementById('add-puzzle-error').textContent = ok ? '' : '指示文をコピーできませんでした。';
+}
+
+// 追加して保存する。同梱の問題と id が重なったら別の id にする。同じ id の自分の問題は置き換える。
+// データリポジトリを設定していればリポジトリにも送る。戻り値は画面に出す一言
+async function addCustomPuzzles(pkgs) {
+  const list = loadCustom();
+  // 友達の問題集に既にある問題は取り込まない（同じ問題が二重に並ぶため）
+  const skipped = pkgs.filter(pkg => pkgIndex[pkg.pub.id] && typeof pkgIndex[pkg.pub.id].from === 'object');
+  pkgs = pkgs.filter(pkg => !skipped.includes(pkg));
+  const skipNote = skipped.length ? `（${skipped.length}問は友達の問題集に既にあるため取り込みませんでした）` : '';
+  if (!pkgs.length) return '新しい問題はありませんでした。' + skipNote;
+  pkgs.forEach(pkg => {
+    if (bundled.some(p => p.id === pkg.pub.id)) pkg.pub.id += '-' + Date.now().toString(36);
+    const i = list.findIndex(c => c.pub.id === pkg.pub.id);
+    if (i >= 0) list[i] = pkg; else list.push(pkg);
+  });
+  saveCustom(list);
+  rebuildPuzzles();
+  if (!myRepo.repo || !myRepo.pat) return 'この端末に保存しました。' + skipNote;
+  try { return 'データリポジトリに保存しました。' + skipNote + await uploadLocal(); }
+  catch (e) { return `この端末に保存しました（データリポジトリへの保存は失敗：${e.message}。次の起動時にもう一度送ります）` + skipNote; }
+}
+async function removeCustomPuzzle(id) {
+  const ent = pkgIndex[id];
+  if (!ent || typeof ent.from === 'object') return;
   saveCustom(loadCustom().filter(c => c.pub.id !== id));
-  puzzles = puzzles.filter(p => p.id !== id);
+  if (myRepo.repo && repoCache[myRepo.repo]) {
+    if (repoCache[myRepo.repo].some(p => p.pub.id === id)) await ghDeletePuzzle(id);
+    repoCache[myRepo.repo] = repoCache[myRepo.repo].filter(p => p.pub.id !== id);
+    save('repo-cache', repoCache);
+  }
+  rebuildPuzzles();
   const all = load('games', {}); delete all[id]; save('games', all);
+}
+
+// ---- データリポジトリ（GitHub contents API） ----
+function ghHeaders(token, raw) {
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+function ghUrl(repo, path) { return `https://api.github.com/repos/${repo}/contents/${path}`; }
+function ghErrorText(status) {
+  if (status === 401) return 'トークンが無効か、期限切れです';
+  if (status === 403) return 'トークンの権限が足りません（Contents の権限と対象リポジトリを確認してください）';
+  if (status === 404) return 'リポジトリが見つかりません（名前と、トークンの対象リポジトリを確認してください）';
+  return `GitHub のエラー（${status}）`;
+}
+function b64utf8(str) {
+  let bin = ''; new TextEncoder().encode(str).forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function normalizeRepoSlug(input) {
+  return (input.trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/^github\.com\//, '')
+    .replace(/\.git$/, '').match(/^[\w.-]+\/[\w.-]+/) || [''])[0].replace(/\.git$/, '');
+}
+// puzzles/ を読む。sha はファイル単位の GET ではなく一覧から取る（1MB 超で GET が 403 になるため）
+let mySha = {};
+async function fetchRepoPuzzles(repo, token) {
+  const res = await fetch(ghUrl(repo, 'puzzles'), { headers: ghHeaders(token), cache: 'no-store' });
+  if (res.status === 404) {
+    // フォルダがまだ無いのか、リポジトリが見えないのかを見分ける
+    const r2 = await fetch(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(token) });
+    if (!r2.ok) throw new Error(ghErrorText(r2.status));
+    return { pkgs: [], shas: {} };
+  }
+  if (!res.ok) throw new Error(ghErrorText(res.status));
+  const files = (await res.json()).filter(f => f.type === 'file' && f.name.endsWith('.json'));
+  const shas = {}, pkgs = [];
+  await Promise.all(files.map(async f => {
+    const id = f.name.replace(/\.json$/, '');
+    shas[id] = f.sha;
+    const r = await fetch(ghUrl(repo, f.path), { headers: ghHeaders(token, true), cache: 'no-store' });
+    if (!r.ok) return;
+    try { const pkg = normalizePuzzle(JSON.parse(await r.text())); pkg.pub.id = id; pkgs.push(pkg); } catch (e) { /* 壊れたファイルは飛ばす */ }
+  }));
+  pkgs.sort((a, b) => a.pub.id.localeCompare(b.pub.id));
+  return { pkgs, shas };
+}
+async function ghPutPuzzle(pkg) {
+  const id = pkg.pub.id;
+  const put = () => fetch(ghUrl(myRepo.repo, `puzzles/${id}.json`), {
+    method: 'PUT', headers: ghHeaders(myRepo.pat),
+    body: JSON.stringify({
+      message: `問題を追加：${pkg.pub.title}`,
+      content: b64utf8(JSON.stringify(pkgFlat(pkg), null, 2) + '\n'),
+      ...(mySha[id] ? { sha: mySha[id] } : {}),
+    }),
+  });
+  let res = await put();
+  if (res.status === 409 || res.status === 422) {
+    mySha = (await fetchRepoPuzzles(myRepo.repo, myRepo.pat)).shas;   // 最新の sha を取り直して1回だけやり直す
+    res = await put();
+  }
+  if (!res.ok) throw new Error(ghErrorText(res.status));
+  mySha[id] = (await res.json()).content.sha;
+}
+async function ghDeletePuzzle(id) {
+  if (!mySha[id]) mySha = (await fetchRepoPuzzles(myRepo.repo, myRepo.pat)).shas;
+  if (!mySha[id]) return;
+  const res = await fetch(ghUrl(myRepo.repo, `puzzles/${id}.json`), {
+    method: 'DELETE', headers: ghHeaders(myRepo.pat),
+    body: JSON.stringify({ message: `問題を削除：${id}`, sha: mySha[id] }),
+  });
+  if (!res.ok && res.status !== 404) throw new Error(ghErrorText(res.status));
+  delete mySha[id];
+}
+// 案内ファイル：Claude Code でリポジトリを開いたときに、データの場所・形式・問題の作り方が分かるようにする。
+// 既に CLAUDE.md があるリポジトリには書かない。作成の失敗は保存の成否に影響させない
+let guideChecked = false;
+async function ensureGuideFile() {
+  if (guideChecked) return false;
+  try {
+    const res = await fetch(ghUrl(myRepo.repo, 'CLAUDE.md'), { headers: ghHeaders(myRepo.pat) });
+    if (res.status !== 404) { guideChecked = res.ok; return false; }
+    const put = await fetch(ghUrl(myRepo.repo, 'CLAUDE.md'), {
+      method: 'PUT', headers: ghHeaders(myRepo.pat),
+      body: JSON.stringify({ message: '案内ファイルを追加（本当にあった怖いスープ）', content: b64utf8(guideFileText()) }),
+    });
+    guideChecked = put.ok;
+    return put.ok;
+  } catch (e) { return false; }
+}
+function guideFileText() {
+  return `# 本当にあった怖いスープ：問題集
+
+このリポジトリは、水平思考クイズアプリ「本当にあった怖いスープ」（https://kyunkyunpeachdisco-maker.github.io/honkowa-soup/）の問題集です。
+アプリが自動で作成した案内ファイルです。
+
+## データの場所
+- デフォルトブランチの \`puzzles/<id>.json\`（1問1ファイル。ファイル名が問題の id）
+- アプリは起動のたびにこのフォルダを読み込みます。ここに置いた問題はアプリの一覧に出ます
+- アプリの招待リンクを受け取った友達も、読み取り専用で同じ問題を遊びます
+
+## 問題の形式
+\`\`\`json
+${JSON.stringify(GEN_EXAMPLE, null, 2)}
+\`\`\`
+- \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
+- \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
+
+## 問題を作るように頼まれたら
+次の手順・ルールで作り、\`puzzles/<id>.json\` として追加してください。
+
+${genRulesText('puzzles/ にある既存の問題とは別の題材にする（先に一覧を確認する）')}
+
+## 編集のルール
+- 1問1ファイル。既存の問題を直すときは、そのファイルだけを変更する
+- 資料に書かれていない事実を足さない
+- JSON として正しい形を保つ（アプリが読めないファイルは一覧に出ない）
+`;
+}
+// 端末内にしかない自分の問題をリポジトリへ送り、送れたものは端末内から外す
+async function uploadLocal() {
+  const local = loadCustom();
+  if (!local.length) return '';
+  if (!repoCache[myRepo.repo]) { const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat); mySha = r.shas; repoCache[myRepo.repo] = r.pkgs; }
+  const sent = [];
+  for (const pkg of local) {
+    await ghPutPuzzle(pkg);
+    repoCache[myRepo.repo] = [...repoCache[myRepo.repo].filter(p => p.pub.id !== pkg.pub.id), pkg];
+    sent.push(pkg.pub.id);
+  }
+  saveCustom(loadCustom().filter(c => !sent.includes(c.pub.id)));
+  save('repo-cache', repoCache);
+  rebuildPuzzles();
+  return await ensureGuideFile() ? '\nリポジトリに案内ファイル（CLAUDE.md）を作成しました。' : '';
+}
+// 起動時：自分のリポジトリと友達の問題集を読み直す。失敗しても控え（repo-cache）で遊べる
+let repoStatus = '';
+async function syncRepos() {
+  const msgs = [];
+  if (myRepo.repo && myRepo.pat) {
+    try {
+      const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat);
+      mySha = r.shas; repoCache[myRepo.repo] = r.pkgs;
+      const note = await uploadLocal();
+      if (note) msgs.push(note.trim());
+    } catch (e) { msgs.push(`データリポジトリを読み込めませんでした：${e.message}`); }
+  }
+  await Promise.all(collections.map(async c => {
+    try { repoCache[c.repo] = (await fetchRepoPuzzles(c.repo, c.token)).pkgs; }
+    catch (e) { msgs.push(`「${c.name}」を読み込めませんでした：${e.message}`); }
+  }));
+  save('repo-cache', repoCache);
+  rebuildPuzzles();
+  repoStatus = msgs.join('\n');
+  if (!document.getElementById('view-list').classList.contains('hidden')) renderList();
+}
+
+// ---- 友達への招待リンク（読み取り専用トークン入り） ----
+async function makeInviteLink(token, name) {
+  await fetchRepoPuzzles(myRepo.repo, token);   // 読めるトークンか確かめる
+  return `${location.origin}${location.pathname}#i=${await encodeJson({ r: myRepo.repo, t: token, n: name })}`;
+}
+async function openInvite(code) {
+  history.replaceState(null, '', location.pathname);
+  const d = await decodeJson(code);
+  if (!d || !d.r || !d.t) throw new Error('招待リンクの形式が正しくありません。');
+  if (d.r === myRepo.repo) { alert('これはあなた自身の問題集の招待リンクです。'); return; }
+  if (!confirm(`「${d.n || d.r}」の問題集を読み込みますか？\n（読み取り専用です。答えは答え合わせまで表示されません）`)) return;
+  const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
+  collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r) }];
+  save('collections', collections);
+  repoCache[d.r] = pkgs; save('repo-cache', repoCache);
+  rebuildPuzzles();
+  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。`);
+}
+function removeCollection(repo) {
+  collections = collections.filter(c => c.repo !== repo); save('collections', collections);
+  delete repoCache[repo]; save('repo-cache', repoCache);
+  rebuildPuzzles();
+}
+
+// ---- ファイルへの書き出し・読み込み ----
+function exportPuzzlesFile() {
+  const list = Object.values(pkgIndex).map(({ pkg }) => pkgFlat(pkg));
+  if (!list.length) { alert('書き出す問題がありません（追加した問題だけを書き出します）。'); return; }
+  const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  saveFile(new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' }), `honkowa-soup-puzzles-${stamp}.json`);
+}
+async function importPuzzlesFile(file) {
+  const pkgs = parsePuzzlesText(await file.text());
+  return `${pkgs.length}問を読み込みました。` + await addCustomPuzzles(pkgs);
 }
 
 // ---- Gemini 呼び出し（画面・進行からは askGM / rivalMove だけを使う） ----
@@ -998,11 +1395,10 @@ async function decodeJson(code) {
 }
 // 問題の共有リンク（答えも入るが、受け取った側の画面には答え合わせまで出さない）
 async function puzzleShareUrl(id) {
-  const c = loadCustom().find(x => x.pub.id === id);
-  return `${location.origin}${location.pathname}#p=${await encodeJson({ ...c.pub, answer: c.answer })}`;
+  return `${location.origin}${location.pathname}#p=${await encodeJson(pkgFlat(pkgIndex[id].pkg))}`;
 }
 async function sharePuzzle(id) {
-  const c = loadCustom().find(x => x.pub.id === id);
+  const c = pkgIndex[id].pkg;
   const url = await puzzleShareUrl(id);
   const text = `本当にあった怖いスープの問題「${c.pub.title}」`;
   if (navigator.share) {
@@ -1015,8 +1411,8 @@ async function openSharedPuzzle(code) {
   history.replaceState(null, '', location.pathname);
   const pkg = normalizePuzzle(await decodeJson(code));
   if (!confirm(`問題「${pkg.pub.title}」を追加しますか？\n（答えは答え合わせまで表示されません）`)) return false;
-  const pub = addCustomPuzzle(pkg);
-  startPuzzle(puzzles.find(p => p.id === pub.id));
+  await addCustomPuzzles([pkg]);
+  startPuzzle(puzzles.find(p => p.id === pkg.pub.id));
   return true;
 }
 
@@ -1063,12 +1459,17 @@ async function openSharedResult(code) {
 function renderList() {
   const box = document.getElementById('puzzle-list');
   box.textContent = '';
+  const local = loadCustom().length;
+  document.getElementById('repo-status').textContent = [
+    myRepo.repo ? `問題の保存先：データリポジトリ ${myRepo.repo}（${(repoCache[myRepo.repo] || []).length}問）` + (local ? `・未送信 ${local}問` : '') : '',
+    repoStatus,
+  ].filter(Boolean).join('\n');
   const all = load('games', {});
   puzzles.forEach(p => {
     const c = el('div', 'card');
     c.appendChild(el('h2', '', p.title));
     const meta = el('div', 'meta');
-    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', '追加した問題'));
+    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集` : '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     const g = all[p.id];
@@ -1078,12 +1479,18 @@ function renderList() {
       const ops = el('div', 'card-ops');
       const sh = el('button', '', '共有');
       sh.onclick = e => { e.stopPropagation(); sharePuzzle(p.id); };
-      const del = el('button', '', '削除');
-      del.onclick = e => {
-        e.stopPropagation();
-        if (confirm(`「${p.title}」を削除しますか？（この端末から消えます）`)) { removeCustomPuzzle(p.id); renderList(); }
-      };
-      ops.append(sh, del);
+      ops.append(sh);
+      if (!p.collection) {
+        const del = el('button', '', '削除');
+        const inRepo = myRepo.repo && pkgIndex[p.id].from === 'mine';
+        del.onclick = async e => {
+          e.stopPropagation();
+          if (!confirm(`「${p.title}」を削除しますか？` + (inRepo ? '\n（データリポジトリからも消えます）' : '\n（この端末から消えます）'))) return;
+          try { await removeCustomPuzzle(p.id); } catch (err) { alert('削除できませんでした：' + err.message); }
+          renderList();
+        };
+        ops.append(del);
+      }
       c.appendChild(ops);
     }
     c.onclick = () => startPuzzle(p);
@@ -1127,16 +1534,109 @@ document.getElementById('btn-add-puzzle').onclick = () => {
   document.getElementById('add-puzzle-error').textContent = '';
   document.getElementById('add-puzzle').classList.remove('hidden');
 };
+document.getElementById('btn-gen-claude').onclick = genWithClaude;
 document.getElementById('add-puzzle-cancel').onclick = () => document.getElementById('add-puzzle').classList.add('hidden');
-document.getElementById('add-puzzle-ok').onclick = () => {
+document.getElementById('add-puzzle-ok').onclick = async () => {
+  const btn = document.getElementById('add-puzzle-ok');
   try {
-    const pub = addCustomPuzzle(parsePuzzleText(document.getElementById('add-puzzle-text').value));
+    const pkgs = parsePuzzlesText(document.getElementById('add-puzzle-text').value);
+    btn.disabled = true;
+    const msg = await addCustomPuzzles(pkgs);
     document.getElementById('add-puzzle').classList.add('hidden');
     renderList();
-    alert(`「${pub.title}」を追加しました。`);
+    alert(`${pkgs.map(p => `「${p.pub.title}」`).join('')}を追加しました。\n${msg}`);
   } catch (e) {
     document.getElementById('add-puzzle-error').textContent = e.message;
-  }
+  } finally { btn.disabled = false; }
+};
+
+// ---- 問題集の保存・共有 ----
+function renderCollections() {
+  const box = document.getElementById('lib-collections');
+  box.textContent = '';
+  if (!collections.length) { box.appendChild(el('p', 'note', 'まだありません。友達から招待リンクをもらって開くと、ここに並びます。')); return; }
+  collections.forEach(c => {
+    const row = el('div', 'coll');
+    row.appendChild(el('span', '', `${c.name}（${(repoCache[c.repo] || []).length}問）`));
+    const del = el('button', '', '外す');
+    del.onclick = () => {
+      if (!confirm(`「${c.name}」の問題集を外しますか？`)) return;
+      removeCollection(c.repo); renderCollections(); renderList();
+    };
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+function openLibrary() {
+  document.getElementById('lib-repo').value = myRepo.repo;
+  document.getElementById('lib-pat').value = myRepo.pat;
+  document.getElementById('inv-name').value = load('invite-name', '') || (myRepo.repo.split('/')[0] || '');
+  document.getElementById('inv-token').value = '';
+  ['lib-error', 'inv-error'].forEach(id => document.getElementById(id).textContent = '');
+  renderCollections();
+  document.getElementById('library').classList.remove('hidden');
+}
+document.getElementById('btn-library').onclick = openLibrary;
+document.getElementById('lib-close').onclick = () => document.getElementById('library').classList.add('hidden');
+document.getElementById('lib-save').onclick = async () => {
+  const err = document.getElementById('lib-error'), btn = document.getElementById('lib-save');
+  const repo = normalizeRepoSlug(document.getElementById('lib-repo').value);
+  const pat = document.getElementById('lib-pat').value.trim();
+  if (!repo) { err.textContent = 'リポジトリを「ユーザー名/リポジトリ名」の形で入れてください'; return; }
+  if (!pat) { err.textContent = 'トークンを入れてください'; return; }
+  err.textContent = '確認中…'; btn.disabled = true;
+  try {
+    const r = await fetchRepoPuzzles(repo, pat);
+    if (myRepo.repo && myRepo.repo !== repo) delete repoCache[myRepo.repo];
+    myRepo.repo = repo; myRepo.pat = pat; mySha = r.shas; repoCache[repo] = r.pkgs; guideChecked = false;
+    save('data-repo', repo); save('github-pat', pat); save('repo-cache', repoCache);
+    collections = collections.filter(c => c.repo !== repo); save('collections', collections);
+    const note = await uploadLocal();
+    rebuildPuzzles();
+    repoStatus = '';
+    renderList();
+    err.textContent = '';
+    alert(`データリポジトリ ${repo} を設定しました（${repoCache[repo].length}問）。` + note);
+  } catch (e) {
+    err.textContent = e.message;
+  } finally { btn.disabled = false; }
+};
+document.getElementById('lib-clear').onclick = () => {
+  if (!myRepo.repo || !confirm('データリポジトリの設定を外しますか？\n（リポジトリの問題は消えません。この端末の一覧から見えなくなります）')) return;
+  delete repoCache[myRepo.repo]; save('repo-cache', repoCache);
+  myRepo.repo = ''; myRepo.pat = ''; mySha = {};
+  save('data-repo', ''); save('github-pat', '');
+  document.getElementById('lib-repo').value = ''; document.getElementById('lib-pat').value = '';
+  repoStatus = ''; rebuildPuzzles(); renderList();
+};
+document.getElementById('inv-make').onclick = async () => {
+  const err = document.getElementById('inv-error'), btn = document.getElementById('inv-make');
+  const token = document.getElementById('inv-token').value.trim();
+  const name = document.getElementById('inv-name').value.trim() || myRepo.repo.split('/')[0];
+  if (!myRepo.repo) { err.textContent = '先に手順3でデータリポジトリを設定してください'; return; }
+  if (!token) { err.textContent = '読み取り専用トークンを入れてください'; return; }
+  if (token === myRepo.pat) { err.textContent = 'これは読み書きできるトークンです。友達には読み取り専用のトークンを別に発行してください'; return; }
+  err.textContent = '確認中…'; btn.disabled = true;
+  try {
+    const url = await makeInviteLink(token, name);
+    save('invite-name', name);
+    err.textContent = '';
+    if (navigator.share) {
+      try { await navigator.share({ title: '本当にあった怖いスープ', text: `「${name}」の問題集への招待`, url }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    alert(await copyText(url) ? '招待リンクをコピーしました。友達に送ってください。' : 'コピーできませんでした。');
+  } catch (e) {
+    err.textContent = '招待リンクを作れませんでした：' + e.message;
+  } finally { btn.disabled = false; }
+};
+document.getElementById('lib-export').onclick = exportPuzzlesFile;
+document.getElementById('lib-import').onclick = () => document.getElementById('lib-file').click();
+document.getElementById('lib-file').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try { alert(await importPuzzlesFile(file)); renderList(); renderCollections(); }
+  catch (err) { alert('読み込めませんでした：' + err.message); }
 };
 document.getElementById('btn-back').onclick = showList;
 
@@ -1175,6 +1675,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   try { await loadPuzzles(); }
   catch (e) { document.getElementById('puzzle-list').appendChild(el('p', 'error', '問題を読み込めませんでした。')); return; }
   ['version-list', 'version-settings'].forEach(id => document.getElementById(id).textContent = versionLabel);
+  const invite = location.hash.match(/^#i=(.+)$/);
+  if (invite) {
+    try { await openInvite(invite[1]); }
+    catch (e) { alert('招待リンクを読み込めませんでした：' + e.message); history.replaceState(null, '', location.pathname); }
+  }
+  syncRepos();
   const sharedPuzzle = location.hash.match(/^#p=(.+)$/);
   if (sharedPuzzle) {
     try { if (await openSharedPuzzle(sharedPuzzle[1])) return; }
