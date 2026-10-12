@@ -120,6 +120,20 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .card-ops button { font-size: 13px; padding: 4px 10px; }
 #gen-theme { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; }
 #add-dest-wrap { margin-bottom: 8px; }
+#edit-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-family: ui-monospace, Menlo, monospace; font-size: 16px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.filters select { font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.tag-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.tag-chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; font-size: 13px; padding: 4px 10px; border-radius: 999px; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.card-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.card-tags .tag { border: none; background: none; padding: 0; font-size: 13px; color: var(--sub); cursor: pointer; }
+button.link { border: none; background: none; padding: 0; color: var(--you); text-decoration: underline; font-size: inherit; cursor: pointer; }
+.card-head { display: flex; align-items: flex-start; gap: 8px; }
+.card-head h2 { flex: 1; min-width: 0; }
+.fav { border: none; background: none; font-size: 22px; line-height: 1; padding: 0 2px; color: var(--sub); cursor: pointer; }
+.fav.on { color: #d9a400; }
 #add-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-family: ui-monospace, Menlo, monospace; }
 .export-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .export-row button { font-size: 14px; padding: 6px 12px; }
@@ -167,6 +181,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   <main id="view-list">
     <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
+    <div class="filters">
+      <select id="f-diff" aria-label="難易度">
+        <option value="">難易度：すべて</option><option>初級</option><option>中級</option><option>上級</option>
+      </select>
+      <select id="f-state" aria-label="状態">
+        <option value="">状態：すべて</option><option value="new">未プレイ</option><option value="playing">対戦中</option><option value="done">済</option>
+      </select>
+      <button id="btn-fav-only">☆ お気に入り</button>
+    </div>
+    <div class="tag-chips" id="tag-chips"></div>
+    <p class="note" id="filter-count"></p>
     <div id="puzzle-list"></div>
     <p class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加する</button>
     <button id="btn-library">問題集の保存・共有</button></p>
@@ -222,6 +247,21 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   </div>
 </div>
 
+<div id="edit-puzzle" class="overlay hidden">
+  <div class="modal">
+    <h2>問題を編集</h2>
+    <p class="note">問題データ（JSON）を直して「保存」を押してください。データリポジトリにある問題は、リポジトリ側も更新されます。<br>
+    スマホで直すのが大変なときは、データリポジトリを claude.ai/code で開いて「〇〇の問題を直して」と頼むこともできます（終わったらプルリクエストをマージしてください）。<br>
+    編集している間にリポジトリ側が変わった場合は、上書きせずに保存を止めます。</p>
+    <textarea id="edit-puzzle-text" rows="16"></textarea>
+    <p class="error" id="edit-puzzle-error"></p>
+    <div class="row">
+      <button id="edit-puzzle-cancel">閉じる</button>
+      <button id="edit-puzzle-ok" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
 <div id="library" class="overlay hidden">
   <div class="modal">
     <h2>問題集の保存・共有</h2>
@@ -251,11 +291,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
     <section class="step">
       <h3><span class="num">3</span>アプリに設定する</h3>
-      <label>リポジトリ
-      <input type="text" id="lib-repo" placeholder="例: yourname/honkowa-soup-data（URL貼り付けも可）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-      <label>トークン
+      <label>トークン（手順2でコピーしたもの）
       <input type="password" id="lib-pat" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-      <p class="note">初回の保存時に、リポジトリへ案内ファイル（CLAUDE.md）を自動で作成します（既に CLAUDE.md があれば作りません）。claude.ai/code でこのリポジトリを開いて「問題を作って」と頼むと、Claude が案内ファイルに沿って問題を作り、リポジトリに追加します。アプリには次の起動時に出ます。<br>
+      <label>リポジトリ（手順1の名前のまま作ったなら空欄で大丈夫です）
+      <input type="text" id="lib-repo" placeholder="空欄なら「あなたのユーザー名/honkowa-soup-data」" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <p class="note">別の名前で作った・既存のリポジトリを使う場合は、そのリポジトリのページのURLを貼ってください。</p>
+      <p class="note">初回の保存時に、リポジトリへ案内ファイル（CLAUDE.md）を自動で作成します（既に CLAUDE.md があれば作りません）。claude.ai/code でこのリポジトリを開いて「問題を作って」と頼むと、Claude が案内ファイルに沿って問題を作り、リポジトリに追加します。Claude が作業用ブランチに保存した場合は、作られたプルリクエストを GitHub でマージ（Merge）すると、次にアプリを開いたときに出ます。<br>
       複数の端末で使うときは、各端末で同じリポジトリとトークンを入れてください。トークンはこの端末のブラウザ内にのみ保存され、送信先は GitHub の API だけです。</p>
       <p class="error" id="lib-error"></p>
       <div class="row">
@@ -394,7 +435,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.13';
+const APP_VERSION = 'v0.1.14';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -455,6 +496,16 @@ function rebuildPuzzles() {
   }))];
 }
 function pkgFlat(pkg) { return { ...pkg.pub, answer: pkg.answer }; }
+function samePkg(a, b) { return JSON.stringify(pkgFlat(a)) === JSON.stringify(pkgFlat(b)); }
+// 追加した問題の id は「題材名-日付-ランダム4文字」（例：canary-resuscitator-20261012-k3x9）。
+// 端末・リポジトリ・友達の問題集の間で重ならないようにするため。id はリポジトリのファイル名にもなる
+const UNIQUE_ID = /-\d{8}-[0-9a-z]{4}$/;
+function hasUniqueId(id) { return UNIQUE_ID.test(id) && /^[a-z0-9-]+$/.test(id); }
+function newId(base) {
+  const slug = String(base || '').toLowerCase().replace(UNIQUE_ID, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'puzzle';
+  const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  return `${slug}-${ymd}-${Math.random().toString(36).slice(2, 6).padEnd(4, '0')}`;
+}
 
 function parsePuzzlesText(text) {
   const t = text.trim().replace(/^```(json)?\s*|\s*```$/g, '');
@@ -479,12 +530,13 @@ function normalizePuzzle(d) {
   if (!d.source || !d.source.url) missing.push('source.url（出典）');
   if (missing.length) throw new Error('次の項目が足りません：' + missing.join('、'));
   const title = String(d.title || d.question_text.slice(0, 16));
-  const id = String(d.id || 'custom-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)).replace(/[^\w-]/g, '-').slice(0, 60);
+  const id = hasUniqueId(String(d.id || '')) ? String(d.id) : newId(d.id);
+  const tags = Array.isArray(d.tags) ? [...new Set(d.tags.map(t => String(t).trim()).filter(Boolean))].slice(0, 6) : [];
   return {
     pub: {
       id, title, status: d.status || 'unverified',
       source: { type: d.source.type || 'web', title: String(d.source.title || d.source.url), url: String(d.source.url) },
-      puzzle_type: d.puzzle_type || '追加', difficulty: d.difficulty || '中級',
+      puzzle_type: d.puzzle_type || '追加', difficulty: d.difficulty || '中級', tags,
       question_text: String(d.question_text),
     },
     answer: {
@@ -503,11 +555,11 @@ const GEN_SOURCES = [
   { name: 'Imperial War Museums（帝国戦争博物館）の解説記事', url: 'https://www.iwm.org.uk/history' },
 ];
 const GEN_EXAMPLE = {
-  id: 'english-lowercase-id',
+  id: 'english-topic-name',
   title: '短い題名（真相を明かさない）',
   question_text: '問題文。不思議な状況だけを書き、最後に「なぜ？」などの問いで終える',
   source: { type: 'asrs', title: '出典ページの題名', url: 'https://…（実際に読んだページのURL）' },
-  puzzle_type: '意外なつながり', difficulty: '中級',
+  puzzle_type: '意外なつながり', difficulty: '中級', tags: ['航空', 'におい'],
   answer: {
     answer_criteria: '必須：(1)… (2)…。この2点が説明できていれば正解',
     discoveries: [{ id: 'd1', fact: '真相にたどり着くための重要な事実', evidence: '資料のどこに書いてあるか' }],
@@ -516,7 +568,7 @@ const GEN_EXAMPLE = {
   },
 };
 // 作り方（検索先・題材の条件・ルール）。指示文とデータリポジトリの案内ファイルで共用する
-function genRulesText(avoid) {
+function genRulesText(avoid, idRule) {
   return `## 手順
 1. 次の検索先から、題材になる実際の出来事を Web 検索で探す（ほかのサイトは使わない）
 ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
@@ -531,7 +583,8 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 ## 作り方のルール
 - 資料に書かれていない事実を足さない。推測で補わない
 - 問題文には真相の手がかりになる不思議な状況だけを書き、真相そのものは書かない
-- id は英小文字・数字・ハイフンで、題材が分かる短い名前にする
+- ${idRule}
+- tags は題材の分野を表す日本語の短い言葉を2〜4個（例：航空・船・鉄道・医療・鉱山・戦争・道具・動物・におい）。既存の問題と同じ言葉をなるべく使う
 - answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る
 - discoveries は真相にたどり着くための重要な事実を3〜5個
 - reference_facts は審判が質問に答えるための資料。本文の事実を6〜12個、日本語で。layer は資料にそのまま書かれた事実なら "confirmed"、体験者本人の申告なら "reporter_claim"
@@ -541,7 +594,7 @@ function buildGenPrompt(theme) {
   const titles = puzzles.map(p => `  - ${p.title}（${p.source && p.source.title || ''}）`).join('\n');
   return `「本当にあった怖いスープ」という水平思考クイズ（ウミガメのスープ形式）の問題を1問作ってください。すべて実際の記録に基づく問題です。
 ${theme ? `\nお題：「${theme}」に関係する出来事を優先してください。\n` : ''}
-${genRulesText('次の問題とは別の題材にする：\n' + titles)}
+${genRulesText('次の問題とは別の題材にする：\n' + titles, 'id は英小文字とハイフンで、題材が分かる短い名前にする（アプリが日付とランダムな文字を付け足して重ならないようにする）')}
 
 ## 出力
 説明は不要です。次の形式のJSONだけを、1つのコードブロックで出力してください。
@@ -560,19 +613,19 @@ async function genWithClaude() {
 // 追加して保存する。同梱の問題と id が重なったら別の id にする。同じ id の自分の問題は置き換える。
 // データリポジトリを設定していればリポジトリにも送る。戻り値は画面に出す一言
 async function addCustomPuzzles(pkgs, dest) {
-  if (dest) return addToCollection(pkgs, dest);
-  const list = loadCustom();
-  // 友達の問題集に既にある問題は取り込まない（同じ問題が二重に並ぶため）
-  const skipped = pkgs.filter(pkg => pkgIndex[pkg.pub.id] && typeof pkgIndex[pkg.pub.id].from === 'object');
-  pkgs = pkgs.filter(pkg => !skipped.includes(pkg));
-  const skipNote = skipped.length ? `（${skipped.length}問は友達の問題集に既にあるため取り込みませんでした）` : '';
-  if (!pkgs.length) return '新しい問題はありませんでした。' + skipNote;
-  pkgs.forEach(pkg => {
-    if (bundled.some(p => p.id === pkg.pub.id)) pkg.pub.id += '-' + Date.now().toString(36);
-    const i = list.findIndex(c => c.pub.id === pkg.pub.id);
-    if (i >= 0) list[i] = pkg; else list.push(pkg);
+  // まったく同じ問題が既にあれば取り込まない（共有リンクを2回開いた場合など）。
+  // id だけが重なる別の問題は、上書きせず id を付け直して両方残す
+  const skipped = [];
+  pkgs = pkgs.filter(pkg => {
+    const ex = pkgIndex[pkg.pub.id];
+    if (ex && samePkg(ex.pkg, pkg)) { skipped.push(pkg); return false; }
+    if (ex || bundled.some(b => b.id === pkg.pub.id)) pkg.pub.id = newId(pkg.pub.id);
+    return true;
   });
-  saveCustom(list);
+  const skipNote = skipped.length ? `（${skipped.length}問は同じ問題が既にあるため取り込みませんでした）` : '';
+  if (!pkgs.length) return '新しい問題はありませんでした。' + skipNote;
+  if (dest) return (await addToCollection(pkgs, dest)) + skipNote;
+  saveCustom([...loadCustom(), ...pkgs]);
   rebuildPuzzles();
   if (!myRepo.repo || !myRepo.pat) return 'この端末に保存しました。' + skipNote;
   try { return 'データリポジトリに保存しました。' + skipNote + await uploadLocal(); }
@@ -581,9 +634,6 @@ async function addCustomPuzzles(pkgs, dest) {
 // 書き込める友達の問題集へ追加する（端末内には置かない）
 async function addToCollection(pkgs, c) {
   for (const pkg of pkgs) {
-    if (bundled.some(p => p.id === pkg.pub.id) || (pkgIndex[pkg.pub.id] && !(typeof pkgIndex[pkg.pub.id].from === 'object' && pkgIndex[pkg.pub.id].from.repo === c.repo && addedByMe(c.repo, pkg.pub.id)))) {
-      pkg.pub.id += '-' + Date.now().toString(36);
-    }
     await ghPutPuzzle(pkg, c.repo, c.token);
     repoCache[c.repo] = [...(repoCache[c.repo] || []).filter(p => p.pub.id !== pkg.pub.id), pkg];
     if (!addedByMe(c.repo, pkg.pub.id)) myAdditions.push({ repo: c.repo, id: pkg.pub.id });
@@ -663,24 +713,25 @@ async function fetchRepoPuzzles(repo, token) {
   pkgs.sort((a, b) => a.pub.id.localeCompare(b.pub.id));
   return { pkgs, shas };
 }
-// repo・token を省くと自分のデータリポジトリ。書き込める招待リンクを受け取った友達の問題集にも使う
-async function ghPutPuzzle(pkg, repo = myRepo.repo, token = myRepo.pat) {
-  const id = pkg.pub.id, shas = shaCache[repo] || (shaCache[repo] = {});
-  const put = () => fetch(ghUrl(repo, `puzzles/${id}.json`), {
+// repo・token を省くと自分のデータリポジトリ。書き込める招待リンクを受け取った友達の問題集にも使う。
+// sha なし＝新規作成：同じ名前のファイルが既にあれば、上書きせず id を付け直して作る。
+// sha あり＝編集：その sha の内容からの更新。リポジトリ側で変わっていたら止める（Claude Code などでの修正を消さないため）
+class ConflictError extends Error {}
+async function ghPutPuzzle(pkg, repo = myRepo.repo, token = myRepo.pat, sha = null) {
+  const shas = shaCache[repo] || (shaCache[repo] = {});
+  const put = () => fetch(ghUrl(repo, `puzzles/${pkg.pub.id}.json`), {
     method: 'PUT', headers: ghHeaders(token),
     body: JSON.stringify({
-      message: `問題を追加：${pkg.pub.title}`,
+      message: `${sha ? '問題を編集' : '問題を追加'}：${pkg.pub.title}`,
       content: b64utf8(JSON.stringify(pkgFlat(pkg), null, 2) + '\n'),
-      ...(shas[id] ? { sha: shas[id] } : {}),
+      ...(sha ? { sha } : {}),
     }),
   });
   let res = await put();
-  if (res.status === 409 || res.status === 422) {
-    Object.assign(shas, (await fetchRepoPuzzles(repo, token)).shas);   // 最新の sha を取り直して1回だけやり直す
-    res = await put();
-  }
+  if (!sha && res.status === 422) { pkg.pub.id = newId(pkg.pub.id); res = await put(); }
+  if (sha && (res.status === 409 || res.status === 422)) throw new ConflictError('リポジトリ側でこの問題が更新されています。いったん閉じて、もう一度「編集」を押してください（最新の内容を読み込みます）。');
   if (!res.ok) throw new Error(ghErrorText(res.status));
-  shas[id] = (await res.json()).content.sha;
+  shas[pkg.pub.id] = (await res.json()).content.sha;
 }
 async function ghDeletePuzzle(id, repo = myRepo.repo, token = myRepo.pat) {
   const shas = shaCache[repo] || (shaCache[repo] = {});
@@ -726,16 +777,22 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 \`\`\`
 - \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
 - \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
+- \`tags\` はアプリの絞り込みに使う（任意）
+- **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
 
 ## 問題を作るように頼まれたら
 次の手順・ルールで作り、\`puzzles/<id>.json\` として追加してください。
 
-${genRulesText('puzzles/ にある既存の問題とは別の題材にする（先に一覧を確認する）')}
+${genRulesText('puzzles/ にある既存の問題とは別の題材にする（先に一覧を確認する）', 'id は上の「問題の形式」の決まり（題材名-日付-ランダム4文字）で付け、puzzles/ に同じ名前のファイルが無いことを確かめる')}
 
 ## 編集のルール
-- 1問1ファイル。既存の問題を直すときは、そのファイルだけを変更する
+- 1問1ファイル。新しい問題は必ず新しいファイルで追加する。既存のファイルを書き換えるのは、その問題を直すよう頼まれたときだけ
+- 既存の問題を直すときは、そのファイルだけを変更する。id（ファイル名）は変えない
 - 資料に書かれていない事実を足さない
 - JSON として正しい形を保つ（アプリが読めないファイルは一覧に出ない）
+
+## 作業が終わったら
+- アプリはデフォルトブランチ（main）しか読みません。作業用のブランチに push した場合は、プルリクエストを作り、ユーザーに「main にマージするとアプリに出ます」と伝えてください
 `;
 }
 // 端末内にしかない自分の問題をリポジトリへ送り、送れたものは端末内から外す
@@ -745,9 +802,14 @@ async function uploadLocal() {
   if (!repoCache[myRepo.repo]) { const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat); shaCache[myRepo.repo] = r.shas; repoCache[myRepo.repo] = r.pkgs; }
   const sent = [];
   for (const pkg of local) {
-    await ghPutPuzzle(pkg);
-    repoCache[myRepo.repo] = [...repoCache[myRepo.repo].filter(p => p.pub.id !== pkg.pub.id), pkg];
-    sent.push(pkg.pub.id);
+    const localId = pkg.pub.id;
+    const remote = repoCache[myRepo.repo].find(p => p.pub.id === localId);
+    if (!remote || !samePkg(remote, pkg)) {
+      if (remote) pkg.pub.id = newId(localId);   // 同じ id の別の問題がリポジトリにある：上書きせず別の id で送る
+      await ghPutPuzzle(pkg);
+      repoCache[myRepo.repo] = [...repoCache[myRepo.repo], pkg];
+    }
+    sent.push(localId);
   }
   saveCustom(loadCustom().filter(c => !sent.includes(c.pub.id)));
   save('repo-cache', repoCache);
@@ -1506,9 +1568,46 @@ function renderList() {
     repoStatus,
   ].filter(Boolean).join('\n');
   const all = load('games', {});
-  puzzles.forEach(p => {
+  const favs = load('favorites', []);
+  const f = loadFilter();
+  const stateOf = p => { const g = all[p.id]; return !g ? 'new' : g.finished ? 'done' : 'playing'; };
+  // タグ：多い順に並べる
+  const counts = {};
+  puzzles.forEach(p => (p.tags || []).forEach(t => counts[t] = (counts[t] || 0) + 1));
+  const chips = document.getElementById('tag-chips');
+  chips.textContent = '';
+  Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b)).forEach(t => {
+    const b = el('button', 'chip' + (f.tag === t ? ' on' : ''), `#${t}`);
+    b.onclick = () => { setFilter({ tag: f.tag === t ? '' : t }); };
+    chips.appendChild(b);
+  });
+  document.getElementById('f-diff').value = f.diff;
+  document.getElementById('f-state').value = f.state;
+  const favBtn = document.getElementById('btn-fav-only');
+  favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
+  favBtn.classList.toggle('primary', f.fav);
+  const shown = puzzles.filter(p =>
+    (!f.tag || (p.tags || []).includes(f.tag)) && (!f.diff || p.difficulty === f.diff) &&
+    (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)));
+  const active = f.tag || f.diff || f.state || f.fav;
+  const count = document.getElementById('filter-count');
+  count.textContent = '';
+  if (active) {
+    count.append(`${puzzles.length}問中 ${shown.length}問を表示　`);
+    const clear = el('button', 'link', '絞り込みを解除');
+    clear.onclick = () => setFilter({ tag: '', diff: '', state: '', fav: false });
+    count.appendChild(clear);
+  }
+  if (active && !shown.length) box.appendChild(el('p', 'note', f.fav && !favs.length ? 'お気に入りはまだありません。問題の ☆ を押すと登録できます。' : '条件に合う問題がありません。'));
+  shown.forEach(p => {
     const c = el('div', 'card');
-    c.appendChild(el('h2', '', p.title));
+    const head = el('div', 'card-head');
+    head.appendChild(el('h2', '', p.title));
+    const star = el('button', 'fav' + (favs.includes(p.id) ? ' on' : ''), favs.includes(p.id) ? '★' : '☆');
+    star.setAttribute('aria-label', 'お気に入り');
+    star.onclick = e => { e.stopPropagation(); toggleFavorite(p.id); renderList(); };
+    head.appendChild(star);
+    c.appendChild(head);
     const meta = el('div', 'meta');
     if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}` : '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
@@ -1516,12 +1615,24 @@ function renderList() {
     const g = all[p.id];
     if (g) meta.appendChild(el('span', '', g.finished ? `済（${g.scores.you}対${g.scores.rival}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
+    if ((p.tags || []).length) {
+      const tg = el('div', 'card-tags');
+      p.tags.forEach(t => {
+        const b = el('button', 'tag', `#${t}`);
+        b.onclick = e => { e.stopPropagation(); setFilter({ tag: t }); };
+        tg.appendChild(b);
+      });
+      c.appendChild(tg);
+    }
     if (p.custom) {
       const ops = el('div', 'card-ops');
       const sh = el('button', '', '共有');
       sh.onclick = e => { e.stopPropagation(); sharePuzzle(p.id); };
       ops.append(sh);
       if (!p.collection || p.byMe) {
+        const ed = el('button', '', '編集');
+        ed.onclick = e => { e.stopPropagation(); openEditPuzzle(p.id); };
+        ops.append(ed);
         const del = el('button', '', '削除');
         const inRepo = p.collection || (myRepo.repo && pkgIndex[p.id].from === 'mine');
         del.onclick = async e => {
@@ -1538,6 +1649,56 @@ function renderList() {
     c.onclick = () => startPuzzle(p);
     box.appendChild(c);
   });
+}
+
+function loadFilter() { return { tag: '', diff: '', state: '', fav: false, ...load('filter', {}) }; }
+function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
+function toggleFavorite(id) {
+  const favs = load('favorites', []);
+  save('favorites', favs.includes(id) ? favs.filter(x => x !== id) : [...favs, id]);
+}
+
+// ---- 問題の編集（自分の問題だけ。問題データを直接直す） ----
+let editingId = null, editingSha = null;
+function editTarget(ent) {
+  if (typeof ent.from === 'object') return { repo: ent.from.repo, token: ent.from.token };
+  if (ent.from === 'mine') return { repo: myRepo.repo, token: myRepo.pat };
+  return null;
+}
+async function openEditPuzzle(id) {
+  if (!confirm('編集画面では答え（真相・正解条件）が見えます。開きますか？')) return;
+  const t = editTarget(pkgIndex[id]);
+  editingSha = null;
+  if (t) {
+    // リポジトリにある問題は、最新の内容と sha を読み直してから開く
+    try {
+      const r = await fetchRepoPuzzles(t.repo, t.token);
+      shaCache[t.repo] = r.shas; repoCache[t.repo] = r.pkgs; save('repo-cache', repoCache); rebuildPuzzles();
+    } catch (e) { alert('リポジトリを読み込めませんでした：' + e.message); return; }
+    if (!pkgIndex[id]) { alert('この問題はリポジトリから削除されています。'); renderList(); return; }
+    editingSha = shaCache[t.repo][id];
+  }
+  editingId = id;
+  document.getElementById('edit-puzzle-text').value = JSON.stringify(pkgFlat(pkgIndex[id].pkg), null, 2);
+  document.getElementById('edit-puzzle-error').textContent = '';
+  document.getElementById('edit-puzzle').classList.remove('hidden');
+}
+async function saveEditedPuzzle(text) {
+  const ent = pkgIndex[editingId];
+  const pkg = normalizePuzzle(JSON.parse(text.trim().replace(/^```(json)?\s*|\s*```$/g, '')));
+  pkg.pub.id = editingId;   // id はファイル名なので変えない
+  const t = editTarget(ent);
+  if (t) {
+    if (!editingSha) throw new ConflictError('リポジトリの最新の状態が分かりません。いったん閉じて、もう一度「編集」を押してください。');
+    await ghPutPuzzle(pkg, t.repo, t.token, editingSha);
+    editingSha = shaCache[t.repo][editingId];
+    repoCache[t.repo] = repoCache[t.repo].map(p => p.pub.id === editingId ? pkg : p);
+  } else {
+    saveCustom(loadCustom().map(p => p.pub.id === editingId ? pkg : p));
+  }
+  save('repo-cache', repoCache);
+  rebuildPuzzles();
+  return pkg.pub.title;
 }
 
 function show(name) {
@@ -1585,6 +1746,22 @@ document.getElementById('btn-add-puzzle').onclick = () => {
   document.getElementById('add-puzzle').classList.remove('hidden');
 };
 document.getElementById('btn-gen-claude').onclick = genWithClaude;
+document.getElementById('btn-fav-only').onclick = () => setFilter({ fav: !loadFilter().fav });
+document.getElementById('f-diff').onchange = e => setFilter({ diff: e.target.value });
+document.getElementById('f-state').onchange = e => setFilter({ state: e.target.value });
+document.getElementById('edit-puzzle-cancel').onclick = () => document.getElementById('edit-puzzle').classList.add('hidden');
+document.getElementById('edit-puzzle-ok').onclick = async () => {
+  const btn = document.getElementById('edit-puzzle-ok'), err = document.getElementById('edit-puzzle-error');
+  btn.disabled = true; err.textContent = '保存中…';
+  try {
+    const title = await saveEditedPuzzle(document.getElementById('edit-puzzle-text').value);
+    document.getElementById('edit-puzzle').classList.add('hidden');
+    renderList();
+    alert(`「${title}」を保存しました。`);
+  } catch (e) {
+    err.textContent = e instanceof SyntaxError ? '問題データ（JSON）の形が崩れています。括弧や「"」、「,」を確認してください。' : e.message;
+  } finally { btn.disabled = false; }
+};
 document.getElementById('add-puzzle-cancel').onclick = () => document.getElementById('add-puzzle').classList.add('hidden');
 document.getElementById('add-puzzle-ok').onclick = async () => {
   const btn = document.getElementById('add-puzzle-ok');
@@ -1596,7 +1773,7 @@ document.getElementById('add-puzzle-ok').onclick = async () => {
     const msg = await addCustomPuzzles(pkgs, collections.find(c => c.repo === destRepo && c.writable));
     document.getElementById('add-puzzle').classList.add('hidden');
     renderList();
-    alert(`${pkgs.map(p => `「${p.pub.title}」`).join('')}を追加しました。\n${msg}`);
+    alert(msg.startsWith('新しい問題は') ? msg : `${pkgs.map(p => `「${p.pub.title}」`).join('')}を追加しました。\n${msg}`);
   } catch (e) {
     document.getElementById('add-puzzle-error').textContent = e.message;
   } finally { btn.disabled = false; }
@@ -1633,12 +1810,20 @@ document.getElementById('btn-library').onclick = openLibrary;
 document.getElementById('lib-close').onclick = () => document.getElementById('library').classList.add('hidden');
 document.getElementById('lib-save').onclick = async () => {
   const err = document.getElementById('lib-error'), btn = document.getElementById('lib-save');
-  const repo = normalizeRepoSlug(document.getElementById('lib-repo').value);
+  const input = document.getElementById('lib-repo').value.trim();
+  let repo = normalizeRepoSlug(input);
   const pat = document.getElementById('lib-pat').value.trim();
-  if (!repo) { err.textContent = 'リポジトリを「ユーザー名/リポジトリ名」の形で入れてください'; return; }
   if (!pat) { err.textContent = 'トークンを入れてください'; return; }
+  if (input && !repo) { err.textContent = 'リポジトリはページのURL（https://github.com/…）か「ユーザー名/リポジトリ名」で入れてください'; return; }
   err.textContent = '確認中…'; btn.disabled = true;
   try {
+    // 空欄なら、トークンの持ち主のユーザー名と手順1の名前から決める
+    if (!repo) {
+      const u = await fetch('https://api.github.com/user', { headers: ghHeaders(pat) });
+      if (!u.ok) throw new Error(ghErrorText(u.status));
+      repo = `${(await u.json()).login}/honkowa-soup-data`;
+      document.getElementById('lib-repo').value = repo;
+    }
     const r = await fetchRepoPuzzles(repo, pat);
     if (myRepo.repo && myRepo.repo !== repo) delete repoCache[myRepo.repo];
     myRepo.repo = repo; myRepo.pat = pat; shaCache[repo] = r.shas; repoCache[repo] = r.pkgs; guideChecked = false;
