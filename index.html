@@ -119,6 +119,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .card-ops { display: flex; gap: 8px; margin-top: 8px; }
 .card-ops button { font-size: 13px; padding: 4px 10px; }
 #gen-theme { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; }
+#add-dest-wrap { margin-bottom: 8px; }
 #add-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-family: ui-monospace, Menlo, monospace; }
 .export-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .export-row button { font-size: 14px; padding: 6px 12px; }
@@ -209,6 +210,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="step">
     <h3><span class="num">2</span>できた問題を貼り付ける</h3>
     <p class="note">Claude が返した問題データ（JSON）をそのまま貼り付けて「追加」を押してください。追加した問題はこの端末（データリポジトリを設定していればリポジトリ）に保存され、一覧の「共有」から1問ずつ友達にリンクで渡せます。</p>
+    <label id="add-dest-wrap" class="hidden">保存先
+    <select id="add-dest"></select></label>
     <textarea id="add-puzzle-text" rows="10" placeholder='{"title": "…", "question_text": "…", "source": {...}, "answer": {...}}'></textarea>
     <p class="error" id="add-puzzle-error"></p>
     </div>
@@ -263,18 +266,23 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
     <section class="step">
       <h3><span class="num">4</span>友達に問題集を渡す（招待リンク）</h3>
-      <p class="note">データリポジトリを非公開のまま、友達に読み取り専用で渡せます。友達は GitHub アカウント不要です。</p>
+      <p class="note">データリポジトリを非公開のまま、友達に渡せます。友達は GitHub アカウント不要です。招待リンクは2種類あります。</p>
+      <label>招待の種類
+      <select id="inv-kind">
+        <option value="ro">遊ぶだけ（読み取り専用）</option>
+        <option value="rw">問題を追加できる（友達が作った問題は、あなたは答えを知らずに遊べます）</option>
+      </select></label>
       <ol>
-        <li><a href="https://github.com/settings/personal-access-tokens/new?name=honkowa-soup-friends" target="_blank" rel="noopener">トークンの発行画面</a>をもう一度開く（Token name に <code>honkowa-soup-friends</code> が入力済み）</li>
+        <li><a id="inv-token-link" href="https://github.com/settings/personal-access-tokens/new?name=honkowa-soup-friends" target="_blank" rel="noopener">トークンの発行画面</a>をもう一度開く（Token name に <code id="inv-token-name">honkowa-soup-friends</code> が入力済み）</li>
         <li>Repository access：<code>Only select repositories</code> → データリポジトリを選ぶ</li>
-        <li>Permissions → Repository permissions：<code>Contents</code> を <code>Read-only</code> にする（<b>Read and write にしない</b>）</li>
+        <li id="inv-perm">Permissions → Repository permissions：<code>Contents</code> を <code>Read-only</code> にする（<b>Read and write にしない</b>）</li>
         <li>「Generate token」→ 表示された <code>github_pat_…</code> を下に貼る</li>
       </ol>
       <label>問題集の名前（友達の画面に出ます）
       <input type="text" id="inv-name" placeholder="例: たろう"></label>
-      <label>読み取り専用トークン
+      <label>トークン
       <input type="password" id="inv-token" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-      <p class="note">招待リンクを知っている人は誰でも問題集（答えを含む）を読めます。渡すのをやめたいときは、GitHub でこのトークンを削除してください（リンクが使えなくなります）。</p>
+      <p class="note" id="inv-warn"></p>
       <p class="error" id="inv-error"></p>
       <p><button id="inv-make" class="primary">招待リンクを作る</button></p>
     </section>
@@ -386,7 +394,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.12';
+const APP_VERSION = 'v0.1.13';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -429,6 +437,8 @@ const myRepo = { repo: load('data-repo', ''), pat: load('github-pat', '') };
 let collections = load('collections', []);   // [{ repo, token, name }]
 let repoCache = load('repo-cache', {});       // { 'owner/repo': [pkg, …] }
 let pkgIndex = {};                            // id → { pkg, from: 'local' | 'mine' | collection }
+let myAdditions = load('my-additions', []);   // 書き込める友達の問題集に、この端末から追加した問題（[{ repo, id }]。削除できるのはこれだけ）
+function addedByMe(repo, id) { return myAdditions.some(a => a.repo === repo && a.id === id); }
 
 function rebuildPuzzles() {
   pkgIndex = {};
@@ -441,6 +451,7 @@ function rebuildPuzzles() {
   collections.forEach(c => (repoCache[c.repo] || []).forEach(p => add(p, c)));
   puzzles = [...bundled, ...Object.values(pkgIndex).map(({ pkg, from }) => ({
     ...pkg.pub, custom: true, collection: typeof from === 'object' ? from.name : '',
+    byMe: typeof from === 'object' && addedByMe(from.repo, pkg.pub.id),
   }))];
 }
 function pkgFlat(pkg) { return { ...pkg.pub, answer: pkg.answer }; }
@@ -548,7 +559,8 @@ async function genWithClaude() {
 
 // 追加して保存する。同梱の問題と id が重なったら別の id にする。同じ id の自分の問題は置き換える。
 // データリポジトリを設定していればリポジトリにも送る。戻り値は画面に出す一言
-async function addCustomPuzzles(pkgs) {
+async function addCustomPuzzles(pkgs, dest) {
+  if (dest) return addToCollection(pkgs, dest);
   const list = loadCustom();
   // 友達の問題集に既にある問題は取り込まない（同じ問題が二重に並ぶため）
   const skipped = pkgs.filter(pkg => pkgIndex[pkg.pub.id] && typeof pkgIndex[pkg.pub.id].from === 'object');
@@ -566,9 +578,34 @@ async function addCustomPuzzles(pkgs) {
   try { return 'データリポジトリに保存しました。' + skipNote + await uploadLocal(); }
   catch (e) { return `この端末に保存しました（データリポジトリへの保存は失敗：${e.message}。次の起動時にもう一度送ります）` + skipNote; }
 }
+// 書き込める友達の問題集へ追加する（端末内には置かない）
+async function addToCollection(pkgs, c) {
+  for (const pkg of pkgs) {
+    if (bundled.some(p => p.id === pkg.pub.id) || (pkgIndex[pkg.pub.id] && !(typeof pkgIndex[pkg.pub.id].from === 'object' && pkgIndex[pkg.pub.id].from.repo === c.repo && addedByMe(c.repo, pkg.pub.id)))) {
+      pkg.pub.id += '-' + Date.now().toString(36);
+    }
+    await ghPutPuzzle(pkg, c.repo, c.token);
+    repoCache[c.repo] = [...(repoCache[c.repo] || []).filter(p => p.pub.id !== pkg.pub.id), pkg];
+    if (!addedByMe(c.repo, pkg.pub.id)) myAdditions.push({ repo: c.repo, id: pkg.pub.id });
+  }
+  save('repo-cache', repoCache); save('my-additions', myAdditions);
+  rebuildPuzzles();
+  return `「${c.name}」の問題集に保存しました。`;
+}
 async function removeCustomPuzzle(id) {
   const ent = pkgIndex[id];
-  if (!ent || typeof ent.from === 'object') return;
+  if (!ent) return;
+  if (typeof ent.from === 'object') {
+    const c = ent.from;
+    if (!c.writable || !addedByMe(c.repo, id)) return;
+    await ghDeletePuzzle(id, c.repo, c.token);
+    repoCache[c.repo] = (repoCache[c.repo] || []).filter(p => p.pub.id !== id);
+    myAdditions = myAdditions.filter(a => !(a.repo === c.repo && a.id === id));
+    save('repo-cache', repoCache); save('my-additions', myAdditions);
+    rebuildPuzzles();
+    const all = load('games', {}); delete all[id]; save('games', all);
+    return;
+  }
   saveCustom(loadCustom().filter(c => c.pub.id !== id));
   if (myRepo.repo && repoCache[myRepo.repo]) {
     if (repoCache[myRepo.repo].some(p => p.pub.id === id)) await ghDeletePuzzle(id);
@@ -604,7 +641,7 @@ function normalizeRepoSlug(input) {
     .replace(/\.git$/, '').match(/^[\w.-]+\/[\w.-]+/) || [''])[0].replace(/\.git$/, '');
 }
 // puzzles/ を読む。sha はファイル単位の GET ではなく一覧から取る（1MB 超で GET が 403 になるため）
-let mySha = {};
+let shaCache = {};   // 'owner/repo' → { id: sha }
 async function fetchRepoPuzzles(repo, token) {
   const res = await fetch(ghUrl(repo, 'puzzles'), { headers: ghHeaders(token), cache: 'no-store' });
   if (res.status === 404) {
@@ -626,33 +663,35 @@ async function fetchRepoPuzzles(repo, token) {
   pkgs.sort((a, b) => a.pub.id.localeCompare(b.pub.id));
   return { pkgs, shas };
 }
-async function ghPutPuzzle(pkg) {
-  const id = pkg.pub.id;
-  const put = () => fetch(ghUrl(myRepo.repo, `puzzles/${id}.json`), {
-    method: 'PUT', headers: ghHeaders(myRepo.pat),
+// repo・token を省くと自分のデータリポジトリ。書き込める招待リンクを受け取った友達の問題集にも使う
+async function ghPutPuzzle(pkg, repo = myRepo.repo, token = myRepo.pat) {
+  const id = pkg.pub.id, shas = shaCache[repo] || (shaCache[repo] = {});
+  const put = () => fetch(ghUrl(repo, `puzzles/${id}.json`), {
+    method: 'PUT', headers: ghHeaders(token),
     body: JSON.stringify({
       message: `問題を追加：${pkg.pub.title}`,
       content: b64utf8(JSON.stringify(pkgFlat(pkg), null, 2) + '\n'),
-      ...(mySha[id] ? { sha: mySha[id] } : {}),
+      ...(shas[id] ? { sha: shas[id] } : {}),
     }),
   });
   let res = await put();
   if (res.status === 409 || res.status === 422) {
-    mySha = (await fetchRepoPuzzles(myRepo.repo, myRepo.pat)).shas;   // 最新の sha を取り直して1回だけやり直す
+    Object.assign(shas, (await fetchRepoPuzzles(repo, token)).shas);   // 最新の sha を取り直して1回だけやり直す
     res = await put();
   }
   if (!res.ok) throw new Error(ghErrorText(res.status));
-  mySha[id] = (await res.json()).content.sha;
+  shas[id] = (await res.json()).content.sha;
 }
-async function ghDeletePuzzle(id) {
-  if (!mySha[id]) mySha = (await fetchRepoPuzzles(myRepo.repo, myRepo.pat)).shas;
-  if (!mySha[id]) return;
-  const res = await fetch(ghUrl(myRepo.repo, `puzzles/${id}.json`), {
-    method: 'DELETE', headers: ghHeaders(myRepo.pat),
-    body: JSON.stringify({ message: `問題を削除：${id}`, sha: mySha[id] }),
+async function ghDeletePuzzle(id, repo = myRepo.repo, token = myRepo.pat) {
+  const shas = shaCache[repo] || (shaCache[repo] = {});
+  if (!shas[id]) Object.assign(shas, (await fetchRepoPuzzles(repo, token)).shas);
+  if (!shas[id]) return;
+  const res = await fetch(ghUrl(repo, `puzzles/${id}.json`), {
+    method: 'DELETE', headers: ghHeaders(token),
+    body: JSON.stringify({ message: `問題を削除：${id}`, sha: shas[id] }),
   });
   if (!res.ok && res.status !== 404) throw new Error(ghErrorText(res.status));
-  delete mySha[id];
+  delete shas[id];
 }
 // 案内ファイル：Claude Code でリポジトリを開いたときに、データの場所・形式・問題の作り方が分かるようにする。
 // 既に CLAUDE.md があるリポジトリには書かない。作成の失敗は保存の成否に影響させない
@@ -703,7 +742,7 @@ ${genRulesText('puzzles/ にある既存の問題とは別の題材にする（�
 async function uploadLocal() {
   const local = loadCustom();
   if (!local.length) return '';
-  if (!repoCache[myRepo.repo]) { const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat); mySha = r.shas; repoCache[myRepo.repo] = r.pkgs; }
+  if (!repoCache[myRepo.repo]) { const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat); shaCache[myRepo.repo] = r.shas; repoCache[myRepo.repo] = r.pkgs; }
   const sent = [];
   for (const pkg of local) {
     await ghPutPuzzle(pkg);
@@ -722,7 +761,7 @@ async function syncRepos() {
   if (myRepo.repo && myRepo.pat) {
     try {
       const r = await fetchRepoPuzzles(myRepo.repo, myRepo.pat);
-      mySha = r.shas; repoCache[myRepo.repo] = r.pkgs;
+      shaCache[myRepo.repo] = r.shas; repoCache[myRepo.repo] = r.pkgs;
       const note = await uploadLocal();
       if (note) msgs.push(note.trim());
     } catch (e) { msgs.push(`データリポジトリを読み込めませんでした：${e.message}`); }
@@ -738,22 +777,24 @@ async function syncRepos() {
 }
 
 // ---- 友達への招待リンク（読み取り専用トークン入り） ----
-async function makeInviteLink(token, name) {
+// writable：問題を追加できる招待（トークンは Contents: Read and write）
+async function makeInviteLink(token, name, writable) {
   await fetchRepoPuzzles(myRepo.repo, token);   // 読めるトークンか確かめる
-  return `${location.origin}${location.pathname}#i=${await encodeJson({ r: myRepo.repo, t: token, n: name })}`;
+  return `${location.origin}${location.pathname}#i=${await encodeJson({ r: myRepo.repo, t: token, n: name, ...(writable ? { w: 1 } : {}) })}`;
 }
 async function openInvite(code) {
   history.replaceState(null, '', location.pathname);
   const d = await decodeJson(code);
   if (!d || !d.r || !d.t) throw new Error('招待リンクの形式が正しくありません。');
   if (d.r === myRepo.repo) { alert('これはあなた自身の問題集の招待リンクです。'); return; }
-  if (!confirm(`「${d.n || d.r}」の問題集を読み込みますか？\n（読み取り専用です。答えは答え合わせまで表示されません）`)) return;
+  const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
+  if (!confirm(`「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
-  collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r) }];
+  collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
   save('collections', collections);
   repoCache[d.r] = pkgs; save('repo-cache', repoCache);
   rebuildPuzzles();
-  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。`);
+  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (d.w ? '\n「＋ 問題を作る・追加する」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
 }
 function removeCollection(repo) {
   collections = collections.filter(c => c.repo !== repo); save('collections', collections);
@@ -1469,7 +1510,7 @@ function renderList() {
     const c = el('div', 'card');
     c.appendChild(el('h2', '', p.title));
     const meta = el('div', 'meta');
-    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集` : '追加した問題'));
+    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}` : '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     const g = all[p.id];
@@ -1480,12 +1521,13 @@ function renderList() {
       const sh = el('button', '', '共有');
       sh.onclick = e => { e.stopPropagation(); sharePuzzle(p.id); };
       ops.append(sh);
-      if (!p.collection) {
+      if (!p.collection || p.byMe) {
         const del = el('button', '', '削除');
-        const inRepo = myRepo.repo && pkgIndex[p.id].from === 'mine';
+        const inRepo = p.collection || (myRepo.repo && pkgIndex[p.id].from === 'mine');
         del.onclick = async e => {
           e.stopPropagation();
-          if (!confirm(`「${p.title}」を削除しますか？` + (inRepo ? '\n（データリポジトリからも消えます）' : '\n（この端末から消えます）'))) return;
+          const where = p.collection ? `「${p.collection}」の問題集から消えます` : inRepo ? 'データリポジトリからも消えます' : 'この端末から消えます';
+          if (!confirm(`「${p.title}」を削除しますか？\n（${where}）`)) return;
           try { await removeCustomPuzzle(p.id); } catch (err) { alert('削除できませんでした：' + err.message); }
           renderList();
         };
@@ -1530,6 +1572,14 @@ document.getElementById('set-save').onclick = () => {
 document.getElementById('set-cancel').onclick = closeSettings;
 document.getElementById('btn-settings').onclick = openSettings;
 document.getElementById('btn-add-puzzle').onclick = () => {
+  const writable = collections.filter(c => c.writable);
+  const dest = document.getElementById('add-dest');
+  dest.textContent = '';
+  dest.appendChild(new Option(myRepo.repo ? 'あなたの問題集（データリポジトリ）' : 'あなたの問題集（この端末）', ''));
+  writable.forEach(c => dest.appendChild(new Option(`「${c.name}」の問題集`, c.repo)));
+  dest.value = load('add-dest', '');
+  if (dest.selectedIndex < 0) dest.value = '';
+  document.getElementById('add-dest-wrap').classList.toggle('hidden', !writable.length);
   document.getElementById('add-puzzle-text').value = '';
   document.getElementById('add-puzzle-error').textContent = '';
   document.getElementById('add-puzzle').classList.remove('hidden');
@@ -1541,7 +1591,9 @@ document.getElementById('add-puzzle-ok').onclick = async () => {
   try {
     const pkgs = parsePuzzlesText(document.getElementById('add-puzzle-text').value);
     btn.disabled = true;
-    const msg = await addCustomPuzzles(pkgs);
+    const destRepo = document.getElementById('add-dest').value;
+    save('add-dest', destRepo);
+    const msg = await addCustomPuzzles(pkgs, collections.find(c => c.repo === destRepo && c.writable));
     document.getElementById('add-puzzle').classList.add('hidden');
     renderList();
     alert(`${pkgs.map(p => `「${p.pub.title}」`).join('')}を追加しました。\n${msg}`);
@@ -1557,7 +1609,7 @@ function renderCollections() {
   if (!collections.length) { box.appendChild(el('p', 'note', 'まだありません。友達から招待リンクをもらって開くと、ここに並びます。')); return; }
   collections.forEach(c => {
     const row = el('div', 'coll');
-    row.appendChild(el('span', '', `${c.name}（${(repoCache[c.repo] || []).length}問）`));
+    row.appendChild(el('span', '', `${c.name}（${(repoCache[c.repo] || []).length}問・${c.writable ? '追加できる' : '遊ぶだけ'}）`));
     const del = el('button', '', '外す');
     del.onclick = () => {
       if (!confirm(`「${c.name}」の問題集を外しますか？`)) return;
@@ -1572,6 +1624,7 @@ function openLibrary() {
   document.getElementById('lib-pat').value = myRepo.pat;
   document.getElementById('inv-name').value = load('invite-name', '') || (myRepo.repo.split('/')[0] || '');
   document.getElementById('inv-token').value = '';
+  renderInviteKind();
   ['lib-error', 'inv-error'].forEach(id => document.getElementById(id).textContent = '');
   renderCollections();
   document.getElementById('library').classList.remove('hidden');
@@ -1588,7 +1641,7 @@ document.getElementById('lib-save').onclick = async () => {
   try {
     const r = await fetchRepoPuzzles(repo, pat);
     if (myRepo.repo && myRepo.repo !== repo) delete repoCache[myRepo.repo];
-    myRepo.repo = repo; myRepo.pat = pat; mySha = r.shas; repoCache[repo] = r.pkgs; guideChecked = false;
+    myRepo.repo = repo; myRepo.pat = pat; shaCache[repo] = r.shas; repoCache[repo] = r.pkgs; guideChecked = false;
     save('data-repo', repo); save('github-pat', pat); save('repo-cache', repoCache);
     collections = collections.filter(c => c.repo !== repo); save('collections', collections);
     const note = await uploadLocal();
@@ -1604,25 +1657,39 @@ document.getElementById('lib-save').onclick = async () => {
 document.getElementById('lib-clear').onclick = () => {
   if (!myRepo.repo || !confirm('データリポジトリの設定を外しますか？\n（リポジトリの問題は消えません。この端末の一覧から見えなくなります）')) return;
   delete repoCache[myRepo.repo]; save('repo-cache', repoCache);
-  myRepo.repo = ''; myRepo.pat = ''; mySha = {};
+  myRepo.repo = ''; myRepo.pat = '';
   save('data-repo', ''); save('github-pat', '');
   document.getElementById('lib-repo').value = ''; document.getElementById('lib-pat').value = '';
   repoStatus = ''; rebuildPuzzles(); renderList();
 };
+function renderInviteKind() {
+  const rw = document.getElementById('inv-kind').value === 'rw';
+  const tname = rw ? 'honkowa-soup-friends-write' : 'honkowa-soup-friends';
+  document.getElementById('inv-token-link').href = `https://github.com/settings/personal-access-tokens/new?name=${tname}`;
+  document.getElementById('inv-token-name').textContent = tname;
+  document.getElementById('inv-perm').innerHTML = rw
+    ? 'Permissions → Repository permissions：<code>Contents</code> を <code>Read and write</code> にする（ほかは触らない）'
+    : 'Permissions → Repository permissions：<code>Contents</code> を <code>Read-only</code> にする（<b>Read and write にしない</b>）';
+  document.getElementById('inv-warn').innerHTML = rw
+    ? '<b>このリンクを持つ人は、問題の追加だけでなく削除もできます。信頼できる友達にだけ渡してください。</b>やめたいときは GitHub でこのトークンを削除してください（消された問題も GitHub の履歴から戻せます）。'
+    : '招待リンクを知っている人は誰でも問題集（答えを含む）を読めます。渡すのをやめたいときは、GitHub でこのトークンを削除してください（リンクが使えなくなります）。';
+}
+document.getElementById('inv-kind').onchange = renderInviteKind;
 document.getElementById('inv-make').onclick = async () => {
   const err = document.getElementById('inv-error'), btn = document.getElementById('inv-make');
   const token = document.getElementById('inv-token').value.trim();
   const name = document.getElementById('inv-name').value.trim() || myRepo.repo.split('/')[0];
+  const rw = document.getElementById('inv-kind').value === 'rw';
   if (!myRepo.repo) { err.textContent = '先に手順3でデータリポジトリを設定してください'; return; }
-  if (!token) { err.textContent = '読み取り専用トークンを入れてください'; return; }
-  if (token === myRepo.pat) { err.textContent = 'これは読み書きできるトークンです。友達には読み取り専用のトークンを別に発行してください'; return; }
+  if (!token) { err.textContent = 'トークンを入れてください'; return; }
+  if (token === myRepo.pat) { err.textContent = 'これはあなた用のトークンです。友達用のトークンを別に発行してください（渡すのをやめるとき、友達の分だけ止められるようにするため）'; return; }
   err.textContent = '確認中…'; btn.disabled = true;
   try {
-    const url = await makeInviteLink(token, name);
+    const url = await makeInviteLink(token, name, rw);
     save('invite-name', name);
     err.textContent = '';
     if (navigator.share) {
-      try { await navigator.share({ title: '本当にあった怖いスープ', text: `「${name}」の問題集への招待`, url }); return; }
+      try { await navigator.share({ title: '本当にあった怖いスープ', text: `「${name}」の問題集への招待` + (rw ? '（問題を追加できます）' : ''), url }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
     alert(await copyText(url) ? '招待リンクをコピーしました。友達に送ってください。' : 'コピーできませんでした。');
