@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>本当にあった怖いスープ - 実話の謎をAIと推理で競う</title>
-<meta name="description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーと交互に質問して解き明かす推理ゲーム。">
+<meta name="description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーや友達と順番に質問して解き明かす推理ゲーム。">
 <meta name="theme-color" content="#3a2f4f">
 <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta property="og:title" content="本当にあった怖いスープ - 実話の謎をAIと推理で競う">
-<meta property="og:description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーと交互に質問して解き明かす推理ゲーム。">
+<meta property="og:description" content="すべて実話の水平思考クイズ。博物館の資料や事故調査の記録から作った謎を、AIプレイヤーや友達と順番に質問して解き明かす推理ゲーム。">
 <meta property="og:url" content="https://kyunkyunpeachdisco-maker.github.io/honkowa-soup/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://kyunkyunpeachdisco-maker.github.io/honkowa-soup/icons/ogp.png">
@@ -69,8 +69,19 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .question { white-space: pre-wrap; margin: 0 0 8px; font-size: 15px; }
 .board .question { max-height: 32dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .scores { display: flex; gap: 12px; align-items: center; font-size: 14px; flex-wrap: wrap; }
-.scores .you { color: var(--you); font-weight: 600; }
-.scores .rival { color: var(--rival); font-weight: 600; }
+.scores .p { font-weight: 600; padding: 1px 6px; border-radius: 6px; }
+.scores .you { color: var(--you); }
+.scores .rival { color: var(--rival); }
+.scores .p.now { outline: 2px solid currentColor; }
+#score-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.turn-now { font-weight: 600; margin-bottom: 6px; }
+.board-ops { display: flex; gap: 12px; align-items: center; margin-top: 6px; font-size: 14px; }
+.board-ops button { padding: 4px 10px; font-size: 13px; }
+.group-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; }
+.group-bar select { flex: 1 1 200px; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+#g-players { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 4px; }
+.modal label.check { display: flex; gap: 8px; align-items: center; }
+.modal label.check input { width: auto; margin: 0; }
 .scores .turns { color: var(--sub); margin-left: auto; }
 .history { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px; }
 .move { margin-bottom: 12px; }
@@ -187,9 +198,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <button id="btn-settings">設定</button>
   </header>
   <main id="view-list">
-    <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
+    <p class="intro">謎はすべて実話です。AIプレイヤーや友達と順番に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。
     <button class="link" id="intro-about">くわしい遊び方</button></p>
+    <div class="group-bar">
+      <select id="group-select" aria-label="遊ぶグループ"></select>
+      <button id="btn-group-edit">編集</button>
+      <button id="btn-group-new">＋ グループ</button>
+    </div>
     <div class="filters">
       <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
       <select id="f-author" aria-label="作者"></select>
@@ -215,13 +231,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <div class="board">
         <p class="question" id="q-text"></p>
         <div class="scores">
-          <span class="you">あなた <span id="s-you">0</span></span>
-          <span class="rival">AIプレイヤー <span id="s-rival">0</span></span>
+          <span id="score-list"></span>
           <span class="turns"><span id="s-turns">0</span>手目</span>
+        </div>
+        <div class="board-ops">
+          <button id="btn-share-progress">問題と経過を共有</button>
+          <button id="btn-undo" class="link">1手戻す</button>
         </div>
       </div>
       <div class="history" id="history"></div>
       <div class="composer">
+        <div class="turn-now" id="turn-now"></div>
         <textarea id="input" placeholder="質問（例：それは食べ物ですか？）か、真相を書いてください"></textarea>
         <div class="row">
           <span class="hint" id="hint">Ctrl/⌘＋Enterで質問</span>
@@ -261,6 +281,26 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   </div>
 </div>
 
+<div id="group-modal" class="overlay hidden">
+  <div class="modal">
+    <h2 id="g-title">グループ</h2>
+    <p class="note">一緒に遊ぶメンバーを登録します。1台の端末を順番に回して遊びます。<br>
+    遊んだ・対戦中といった進み具合はグループごとに保存されるので、後日続きから遊べます。</p>
+    <label>グループ名
+    <input id="g-name" type="text" placeholder="例: 家族、サークル"></label>
+    <label>プレイヤー（1行に1人。この順番で手番が回ります）
+    <textarea id="g-players" rows="5" placeholder="たろう&#10;はなこ"></textarea></label>
+    <label class="check"><input type="checkbox" id="g-npc"> AIプレイヤーも参加する</label>
+    <p class="note">メンバーを変えても、対戦中の問題は始めたときのメンバーのまま続きます。</p>
+    <p class="error" id="g-error"></p>
+    <div class="row">
+      <button id="g-delete">削除</button>
+      <button id="g-cancel">閉じる</button>
+      <button id="g-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
 <div id="about" class="overlay hidden">
   <div class="modal about">
     <h2>本当にあった怖いスープとは</h2>
@@ -269,10 +309,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
     <h3>遊び方</h3>
     <ul>
-      <li>あなたと <b>AIプレイヤー</b> が交互に1手ずつ、質問するか解答します</li>
-      <li><b>審判（AI）</b> が記録をもとに、質問に答えます</li>
-      <li>どちらかが真相を当てるか、「降参」すると終わり。得点の多いほうの勝ちです</li>
+      <li>プレイヤーが順番に1手ずつ、質問するか解答します。<b>審判（AI）</b> が記録をもとに答えます</li>
+      <li>最初は「ひとりで」（あなたと <b>AIプレイヤー</b> の対戦）になっています</li>
+      <li>だれかが真相を当てるか、「降参」すると終わり。得点がいちばん多い人の勝ちです</li>
       <li>手数に上限はありません。進行は自動で保存されるので、途中でやめても続きから遊べます</li>
+      <li>入力を間違えたときは「1手戻す」で、最後の質問を取り消せます（得点も元に戻ります）</li>
+    </ul>
+
+    <h3>みんなで遊ぶ</h3>
+    <ul>
+      <li>問題一覧の上の「＋ グループ」で、グループ名とメンバーを登録します。1台の端末を、表示される「〇〇の番です」の順に回して遊びます</li>
+      <li>AIプレイヤーを入れるかどうかも選べます。入れなくても遊べます</li>
+      <li>グループはいくつでも登録でき、一覧の上で切り替えられます。遊んだ・対戦中といった進み具合はグループごとに保存されるので、後日そのグループで続きから遊べます</li>
+      <li>対戦画面の「問題と経過を共有」で、問題文とこれまでの質問・回答・得点・次の番を LINE グループなどに貼れます（答えは含まれません）</li>
     </ul>
 
     <h3>得点</h3>
@@ -493,7 +542,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.16';
+const APP_VERSION = 'v0.1.17';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -712,7 +761,7 @@ async function removeCustomPuzzle(id) {
     myAdditions = myAdditions.filter(a => !(a.repo === c.repo && a.id === id));
     save('repo-cache', repoCache); save('my-additions', myAdditions);
     rebuildPuzzles();
-    const all = load('games', {}); delete all[id]; save('games', all);
+    deleteGameEverywhere(id);
     return;
   }
   saveCustom(loadCustom().filter(c => c.pub.id !== id));
@@ -722,7 +771,7 @@ async function removeCustomPuzzle(id) {
     save('repo-cache', repoCache);
   }
   rebuildPuzzles();
-  const all = load('games', {}); delete all[id]; save('games', all);
+  deleteGameEverywhere(id);
 }
 
 // ---- データリポジトリ（GitHub contents API） ----
@@ -911,7 +960,7 @@ async function openInvite(code) {
   if (d.r === myRepo.repo) { alert('これはあなた自身の問題集の招待リンクです。'); return; }
   const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
   const intro = settings.key || settings.groqKey ? '' :
-    '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIと交互に質問しながら解く水平思考クイズです。\n' +
+    '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIや友達と順番に質問しながら解く水平思考クイズです。\n' +
     '遊ぶには Google の Gemini APIキー（無料）が1つ要ります。作り方は次の画面で案内します。\n\n';
   if (!confirm(`${intro}「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
@@ -1089,7 +1138,7 @@ async function callGemini(system, prompt, temperature, model = settings.model) {
 function historyText(game) {
   if (!game.moves.length) return '（まだ質問はありません）';
   return game.moves.map((m, i) => {
-    const who = m.by === 'you' ? '人間プレイヤー' : 'AIプレイヤー';
+    const who = game.players[m.by].ai ? 'AIプレイヤー' : `プレイヤー「${game.players[m.by].name}」`;
     const kind = m.kind === 'question' ? '質問' : '解答';
     return `${i + 1}. ${who}の${kind}：${m.text}\n   → ${m.reply}`;
   }).join('\n');
@@ -1145,7 +1194,7 @@ ${text}
   return { correct: r.correct === true, reason: String(r.reason || '') };
 }
 
-const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスープ」で人間プレイヤーと対戦するAIプレイヤーです。真相は知りません。問題文と公開された質問履歴だけから推理します。
+const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスープ」で人間のプレイヤーたちと対戦するAIプレイヤーです。真相は知りません。問題文と公開された質問履歴だけから推理します。
 ルール：手番では「質問」か「解答」のどちらか1つ。質問は「はい／いいえ」で答えられる形で、1つの事実だけを確かめる。
 得点：まだ見つかっていない重要な事実を質問で確定させると+1。真相に正解すると+2で終了。解答を外すと-1。真相に関係ない質問、真相に影響しない細部（形・色など）を聞く質問、既に分かっていることの聞き直しは-1。
 正直に推理し、真相に近づく質問をしてください。
@@ -1155,11 +1204,10 @@ const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いス�
 const RIVAL_MIN_CONFIRMED = 3;
 
 async function rivalMove(game, onRetry) {
-  const s = game.scores;
   const confirmed = game.moves.filter(m => m.reply === 'はい' || m.reply === '部分的にはい').length;
   const canAnswer = confirmed >= RIVAL_MIN_CONFIRMED;
   const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。`;
-  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】あなた（AIプレイヤー）${s.rival}点、人間プレイヤー${s.you}点${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
+  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】${game.players.map((p, i) => `${p.ai ? 'あなた（AIプレイヤー）' : p.name}${game.scores[i]}点`).join('、')}${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
   let r = await callAI('rival', RIVAL_SYSTEM, prompt, 0.7);
   // 解答できない段階で解答を返したら、質問を出し直させる（質問扱いにすると審判が解答とみなして素通りするため）
   for (let i = 0; i < 2 && !canAnswer && r.type === 'answer'; i++) {
@@ -1173,24 +1221,57 @@ async function rivalMove(game, onRetry) {
   return { type, text };
 }
 
+// ---- グループ（1台の端末を回して遊ぶメンバー。進み具合はグループごとに保存） ----
+const SOLO = { id: 'solo', name: 'ひとりで', players: ['あなた'], npc: true };
+function loadGroups() { const g = load('groups', []); return g.some(x => x.id === 'solo') ? g : [SOLO, ...g]; }
+function currentGroup() { const gs = loadGroups(); return gs.find(g => g.id === load('group', 'solo')) || gs[0]; }
+// 「ひとりで」は従来の保存（games）をそのまま使う
+function gamesKey(gid) { return gid === 'solo' ? 'games' : `games-${gid}`; }
+function loadGames(gid = currentGroup().id) { return load(gamesKey(gid), {}); }
+function saveGames(all, gid) { save(gamesKey(gid), all); }
+function deleteGameEverywhere(id) {
+  loadGroups().forEach(g => { const all = loadGames(g.id); if (all[id]) { delete all[id]; saveGames(all, g.id); } });
+}
+
 // ---- 進行 ----
+// game.players：[{ name, ai }]。moves[].by・found の値・result は players の番号（result は 'giveup' もある）
 let game = null;      // 対戦中の状態（localStorage に保存）
 let answerData = null;
 let busy = false;
+const pName = i => game.players[i].name;
+const isAI = i => game.players[i].ai;
+const pCls = i => isAI(i) ? 'rival' : 'you';
 
+// 旧形式（あなた／AIプレイヤーの2人固定・by は 'you' | 'rival'）を読み替える
+function normalizeGame(g) {
+  if (g.players) return g;
+  const idx = b => b === 'rival' ? 1 : 0;
+  return {
+    ...g, players: [{ name: 'あなた', ai: false }, { name: 'AIプレイヤー', ai: true }],
+    scores: [g.scores.you || 0, g.scores.rival || 0], turn: idx(g.turn),
+    result: g.result === 'you' || g.result === 'rival' ? idx(g.result) : g.result,
+    found: Object.fromEntries(Object.entries(g.found || {}).map(([k, v]) => [k, idx(v)])),
+    moves: g.moves.map(m => ({ ...m, by: idx(m.by) })),
+  };
+}
 function newGame(puzzle) {
-  return { puzzleId: puzzle.id, puzzle, moves: [], found: {}, scores: { you: 0, rival: 0 }, turn: 'you', finished: false, result: null };
+  const grp = currentGroup();
+  const players = [...grp.players.map(name => ({ name, ai: false })), ...(grp.npc ? [{ name: 'AIプレイヤー', ai: true }] : [])];
+  return { puzzleId: puzzle.id, puzzle, groupId: grp.id, players, moves: [], found: {}, scores: players.map(() => 0), turn: 0, finished: false, result: null };
 }
 function saveGame() {
-  const all = load('games', {});
+  const gid = game.groupId || 'solo';
+  const all = loadGames(gid);
   all[game.puzzleId] = game;
-  save('games', all);
+  saveGames(all, gid);
 }
+function scoresLine(g = game) { return g.players.map((p, i) => `${p.name} ${g.scores[i]}点`).join('・'); }
 
 async function startPuzzle(puzzle) {
   lastError = null;
-  const all = load('games', {});
-  game = all[puzzle.id] && !all[puzzle.id].finished ? all[puzzle.id] : newGame(puzzle);
+  const saved = loadGames()[puzzle.id];
+  game = saved && !saved.finished ? normalizeGame(saved) : newGame(puzzle);
+  if (!game.groupId) game.groupId = currentGroup().id;
   game.puzzle = puzzle;
   answerData = await loadAnswer(puzzle.id);
   if (game.finished) return showReveal();
@@ -1198,7 +1279,7 @@ async function startPuzzle(puzzle) {
   document.getElementById('title').textContent = puzzle.title;
   document.getElementById('q-text').textContent = puzzle.question_text;
   renderGame();
-  if (game.turn === 'rival') runRival();
+  if (isAI(game.turn)) runRival();
 }
 
 function scoreOf(reply, discovery) {
@@ -1208,20 +1289,21 @@ function scoreOf(reply, discovery) {
 }
 
 async function playerMove(kind) {
-  if (busy || game.finished || game.turn !== 'you') return;
+  if (busy || game.finished || isAI(game.turn)) return;
   const input = document.getElementById('input');
   const text = input.value.trim();
   if (!text) return;
-  setBusy(true, kind === 'question' ? '審判があなたの質問を判定しています…' : '審判があなたの解答を判定しています…');
+  const by = game.turn;
+  setBusy(true, `審判が${pName(by)}の${kind === 'question' ? '質問' : '解答'}を判定しています…`);
   try {
-    const ok = await applyMove('you', kind, text);
+    const ok = await applyMove(by, kind, text);
     if (ok) input.value = '';
   } catch (e) {
     showError(e);
   } finally {
     setBusy(false);
   }
-  if (!game.finished && game.turn === 'rival') runRival();
+  if (!game.finished && isAI(game.turn)) runRival();
 }
 
 // 1手を判定して記録する。質問か解答か曖昧なときは減点前に確認する（プレイヤーのみ）
@@ -1229,7 +1311,7 @@ async function applyMove(by, kind, text) {
   if (kind === 'question') {
     const r = await askGM('question', text, game, answerData);
     if (r.answerLike) {
-      if (by === 'you') {
+      if (!isAI(by)) {
         const asAnswer = confirm('この質問は真相をまとめて当てにいく形なので、解答として扱います。\n解答として判定しますか？（外れると−1）\n\n「キャンセル」で書き直せます。');
         if (!asAnswer) return false;
       }
@@ -1246,7 +1328,7 @@ async function applyMove(by, kind, text) {
     game.moves.push({ by, kind, text, reply: r.correct ? '正解' : '不正解', pts, reason: r.reason });
     if (r.correct) { game.finished = true; game.result = by; }
   }
-  game.turn = by === 'you' ? 'rival' : 'you';
+  game.turn = (by + 1) % game.players.length;
   saveGame();
   renderGame();
   if (game.finished) setTimeout(showReveal, 900);
@@ -1254,17 +1336,56 @@ async function applyMove(by, kind, text) {
 }
 
 async function runRival() {
-  if (busy || game.finished || game.turn !== 'rival') return;
+  if (busy || game.finished || !isAI(game.turn)) return;
+  const by = game.turn;
   setBusy(true, 'AIプレイヤーが次の手を考えています…');
   try {
     const m = await rivalMove(game, () => setStatus('AIプレイヤーが質問を考え直しています…'));
     setStatus(`審判がAIプレイヤーの${m.type === 'answer' ? '解答' : '質問'}「${m.text}」を判定しています…`);
-    await applyMove('rival', m.type, m.text);
+    await applyMove(by, m.type, m.text);
   } catch (e) {
     showError(e, true);
   } finally {
     setBusy(false);
   }
+}
+
+// 1手戻す：最後の手を取り消し、得点・発見も元に戻して、その手の人の番にする。
+// 最後の手が AIプレイヤーなら、その前の人間の手まで戻す（AIの番に戻ると、すぐまたAIが打つため）
+function undoMove() {
+  if (busy || game.finished || !game.moves.length) return;
+  let k = game.moves.length - 1;
+  while (k > 0 && isAI(game.moves[k].by)) k--;
+  if (isAI(game.moves[k].by)) return;
+  const m = game.moves[k];
+  const extra = game.moves.length - 1 - k;
+  if (!confirm(`${pName(m.by)}の「${m.text}」を取り消しますか？` + (extra ? '\n（その後のAIプレイヤーの手も取り消します）' : '') + '\n得点も元に戻ります。')) return;
+  game.moves.splice(k).forEach(x => {
+    game.scores[x.by] -= x.pts;
+    if (x.discovery) delete game.found[x.discovery];
+  });
+  game.turn = m.by;
+  lastError = null;
+  saveGame();
+  renderGame();
+  document.getElementById('input').value = m.text;
+}
+
+// 問題文と経過（質問・回答・得点・次の手番）を LINE などに貼れる文章にする。答えは含めない
+async function shareProgress() {
+  const lines = [`本当にあった怖いスープ「${game.puzzle.title}」`, '', '【問題】', game.puzzle.question_text];
+  if (game.moves.length) {
+    lines.push('', '【これまでの質問と回答】', ...game.moves.map((m, i) => `${i + 1}. ${pName(m.by)}の${m.kind === 'question' ? '質問' : '解答'}：${m.text} → ${m.reply}`));
+    lines.push('', `【得点】${scoresLine()}`);
+  }
+  if (!game.finished) lines.push('', `次は${pName(game.turn)}の番です`);
+  lines.push('', APP_URL);
+  const text = lines.join('\n');
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  alert(await copyText(text) ? '問題文と経過をコピーしました。LINE などに貼り付けてください。' : 'コピーできませんでした。');
 }
 
 function giveUp() {
@@ -1285,15 +1406,18 @@ function el(tag, cls, text) {
 function ptsLabel(p) { return p > 0 ? `+${p}` : p < 0 ? `${p}` : '±0'; }
 
 function renderGame() {
-  document.getElementById('s-you').textContent = game.scores.you;
-  document.getElementById('s-rival').textContent = game.scores.rival;
+  const sl = document.getElementById('score-list');
+  sl.textContent = '';
+  game.players.forEach((p, i) => sl.appendChild(el('span', `p ${pCls(i)}${i === game.turn && !game.finished ? ' now' : ''}`, `${p.name} ${game.scores[i]}`)));
+  document.getElementById('turn-now').textContent = game.finished ? '' : `${pName(game.turn)}の番です`;
+  document.getElementById('btn-undo').classList.toggle('hidden', game.finished || !game.moves.some(m => !game.players[m.by].ai));
   document.getElementById('s-turns').textContent = game.moves.length + (game.finished ? 0 : 1);
   const h = document.getElementById('history');
   h.textContent = '';
-  if (!game.moves.length) h.appendChild(el('p', 'system', 'あなたの手番から始まります。'));
+  if (!game.moves.length) h.appendChild(el('p', 'system', `${pName(0)}の手番から始まります。`));
   game.moves.forEach((m, i) => {
     const d = el('div', 'move');
-    d.appendChild(el('div', `who ${m.by}`, `${i + 1}手目・${m.by === 'you' ? 'あなた' : 'AIプレイヤー'}の${m.kind === 'question' ? '質問' : '解答'}`));
+    d.appendChild(el('div', `who ${pCls(m.by)}`, `${i + 1}手目・${pName(m.by)}の${m.kind === 'question' ? '質問' : '解答'}`));
     d.appendChild(el('div', 'text', m.text));
     const r = el('div', 'reply', `→ ${m.reply}`);
     r.appendChild(el('span', `pts ${m.pts > 0 ? 'plus' : m.pts < 0 ? 'minus' : ''}`, ptsLabel(m.pts)));
@@ -1313,7 +1437,7 @@ function renderGame() {
     updateStatusTime();
   }
   h.scrollTop = h.scrollHeight;
-  const myTurn = game.turn === 'you' && !game.finished;
+  const myTurn = !isAI(game.turn) && !game.finished;
   ['btn-ask', 'btn-answer', 'btn-giveup'].forEach(id => document.getElementById(id).disabled = !myTurn || busy);
 }
 
@@ -1364,10 +1488,12 @@ function renderError(h) {
 }
 
 function resultSummary() {
-  const s = game.scores;
-  const winner = s.you > s.rival ? 'あなたの勝ち' : s.you < s.rival ? 'AIプレイヤーの勝ち' : '引き分け';
-  const solved = game.result === 'you' ? 'あなたが真相を当てました' : game.result === 'rival' ? 'AIプレイヤーが真相を当てました' : '降参';
-  return { winner, solved, line: `${winner}（あなた ${s.you}点・AIプレイヤー ${s.rival}点）`, sub: `${solved}・${game.moves.length}手` };
+  const s = game.scores, top = Math.max(...s);
+  const tops = game.players.filter((p, i) => s[i] === top).map(p => p.name);
+  const winner = tops.length === game.players.length ? '引き分け' : tops.length > 1 ? `${tops.join('・')}が同点で1位` : `${tops[0]}の勝ち`;
+  const solved = typeof game.result === 'number' ? `${pName(game.result)}が真相を当てました` : '降参';
+  const line = game.players.length === 1 ? scoresLine() : `${winner}（${scoresLine()}）`;
+  return { winner, solved, line, sub: `${solved}・${game.moves.length}手` };
 }
 
 // shared: 共有リンクから開いた結果（自分の対戦ではない）
@@ -1380,11 +1506,9 @@ function showReveal(shared) {
   page.appendChild(v);
   if (shared) v.appendChild(el('p', 'note', '共有された対戦結果です'));
   v.appendChild(el('div', 'result-title', `本当にあった怖いスープ「${game.puzzle.title}」`));
-  const s = game.scores;
-  const winner = s.you > s.rival ? 'あなたの勝ち' : s.you < s.rival ? 'AIプレイヤーの勝ち' : '引き分け';
-  const solved = game.result === 'you' ? 'あなたが真相を当てました' : game.result === 'rival' ? 'AIプレイヤーが真相を当てました' : '降参';
-  v.appendChild(el('div', 'result', `${winner}（あなた ${s.you}点・AIプレイヤー ${s.rival}点）`));
-  v.appendChild(el('p', 'note', `${solved}・${game.moves.length}手`));
+  const rs = resultSummary();
+  v.appendChild(el('div', 'result', rs.line));
+  v.appendChild(el('p', 'note', rs.sub));
 
   v.appendChild(el('h2', '', '問題'));
   v.appendChild(el('p', 'question', game.puzzle.question_text));
@@ -1394,8 +1518,9 @@ function showReveal(shared) {
   answerData.discoveries.forEach(d => {
     const by = game.found[d.id];
     const li = el('li', '', d.fact);
-    li.appendChild(el('span', 'note', by ? `（${by === 'you' ? 'あなた' : 'AIプレイヤー'}が発見）` : '（未発見）'));
-    if (by) li.style.color = by === 'you' ? 'var(--you)' : 'var(--rival)';
+    const has = by !== undefined && by !== null;
+    li.appendChild(el('span', 'note', has ? `（${pName(by)}が発見）` : '（未発見）'));
+    if (has) li.style.color = `var(--${pCls(by)})`;
     ul.appendChild(li);
   });
   v.appendChild(ul);
@@ -1421,7 +1546,7 @@ function showReveal(shared) {
   const t = el('table', 'log-table');
   game.moves.forEach((m, i) => {
     const tr = el('tr');
-    tr.appendChild(el('td', '', `${i + 1}・${m.by === 'you' ? 'あなた' : 'AIプレイヤー'}`));
+    tr.appendChild(el('td', '', `${i + 1}・${pName(m.by)}`));
     const td = el('td', '', `${m.text}\n→ ${m.reply}（${ptsLabel(m.pts)}）${m.reason ? `\n判定：${m.reason}` : ''}`);
     td.style.whiteSpace = 'pre-wrap';
     tr.appendChild(td);
@@ -1443,7 +1568,8 @@ function showReveal(shared) {
   const again = el('button', '', shared ? 'この問題で遊ぶ' : 'もう一度遊ぶ');
   again.onclick = () => {
     if (shared) { history.replaceState(null, '', location.pathname); return startPuzzle(game.puzzle); }
-    const all = load('games', {}); delete all[game.puzzleId]; save('games', all);
+    const gid = game.groupId || 'solo', all = loadGames(gid);
+    delete all[game.puzzleId]; saveGames(all, gid);
     startPuzzle(game.puzzle);
   };
   const back = el('button', 'primary', '問題一覧へ');
@@ -1459,7 +1585,7 @@ function exportMsg(text) {
   const e = document.querySelector('.export-msg');
   if (e) e.textContent = text;
 }
-function who(by) { return by === 'you' ? 'あなた' : 'AIプレイヤー'; }
+function who(by) { return pName(by); }
 
 function resultText(md) {
   const r = resultSummary();
@@ -1470,7 +1596,7 @@ function resultText(md) {
     '', `${md ? '**' : ''}${r.line}${md ? '**' : ''}`, r.sub, '',
     h('問題'), game.puzzle.question_text, '',
     h('重要な事実'),
-    ...answerData.discoveries.map(d => li(`${d.fact}（${game.found[d.id] ? who(game.found[d.id]) + 'が発見' : '未発見'}）`)), '',
+    ...answerData.discoveries.map(d => li(`${d.fact}（${d.id in game.found ? who(game.found[d.id]) + 'が発見' : '未発見'}）`)), '',
     h('真相'), answerData.reveal.summary, '', answerData.reveal.causal_chain.join(' → '), '',
     h('出典'), md ? `[${game.puzzle.source.title}](${game.puzzle.source.url})` : `${game.puzzle.source.title}\n${game.puzzle.source.url}`, '',
     h('対戦の記録'),
@@ -1584,8 +1710,8 @@ async function openSharedPuzzle(code) {
 
 async function encodeResult() {
   const data = {
-    v: 1, p: game.puzzleId, s: [game.scores.you, game.scores.rival], r: game.result, f: game.found,
-    m: game.moves.map(m => [m.by === 'you' ? 0 : 1, m.kind === 'question' ? 'q' : 'a', m.text, m.reply, m.pts, m.discovery || '']),
+    v: 2, p: game.puzzleId, n: game.players.map(p => p.name), a: game.players.findIndex(p => p.ai), s: game.scores, r: game.result, f: game.found,
+    m: game.moves.map(m => [m.by, m.kind === 'question' ? 'q' : 'a', m.text, m.reply, m.pts, m.discovery || '']),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(data));
   if (window.CompressionStream) return 'z' + b64url(await pipeBytes(bytes, new CompressionStream('deflate-raw')));
@@ -1597,10 +1723,16 @@ async function decodeResult(code) {
   const d = JSON.parse(new TextDecoder().decode(bytes));
   const puzzle = puzzles.find(p => p.id === d.p);
   if (!puzzle) throw new Error('問題が見つかりません');
-  return {
-    puzzleId: d.p, puzzle, found: d.f || {}, scores: { you: d.s[0], rival: d.s[1] }, turn: 'you', finished: true, result: d.r,
-    moves: d.m.map(([by, kind, text, reply, pts, disc]) => ({ by: by ? 'rival' : 'you', kind: kind === 'q' ? 'question' : 'answer', text, reply, pts, discovery: disc || null })),
-  };
+  const moves = d.m.map(([by, kind, text, reply, pts, disc]) => ({ by, kind: kind === 'q' ? 'question' : 'answer', text, reply, pts, discovery: disc || null }));
+  if (d.v === 1) {
+    // 旧形式：0＝あなた、1＝AIプレイヤー
+    const players = [{ name: 'あなた', ai: false }, { name: 'AIプレイヤー', ai: true }];
+    const res = d.r === 'you' ? 0 : d.r === 'rival' ? 1 : d.r;
+    const found = Object.fromEntries(Object.entries(d.f || {}).map(([k, v]) => [k, v === 'rival' ? 1 : 0]));
+    return { puzzleId: d.p, puzzle, players, found, scores: d.s, turn: 0, finished: true, result: res, moves };
+  }
+  const players = d.n.map((name, i) => ({ name, ai: i === d.a }));
+  return { puzzleId: d.p, puzzle, players, found: d.f || {}, scores: d.s, turn: 0, finished: true, result: d.r, moves };
 }
 async function exportLink() {
   const url = `${location.origin}${location.pathname}#r=${await encodeResult()}`;
@@ -1630,7 +1762,8 @@ function renderList() {
     myRepo.repo ? `問題の保存先：データリポジトリ ${myRepo.repo}（${(repoCache[myRepo.repo] || []).length}問）` + (local ? `・未送信 ${local}問` : '') : '',
     repoStatus,
   ].filter(Boolean).join('\n');
-  const all = load('games', {});
+  renderGroupBar();
+  const all = loadGames();
   const favs = load('favorites', []);
   const f = loadFilter();
   const stateOf = p => { const g = all[p.id]; return !g ? 'new' : g.finished ? 'done' : 'playing'; };
@@ -1688,7 +1821,7 @@ function renderList() {
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     const g = all[p.id];
-    if (g) meta.appendChild(el('span', '', g.finished ? `済（${g.scores.you}対${g.scores.rival}）` : `対戦中・${g.moves.length}手`));
+    if (g) meta.appendChild(el('span', '', g.finished ? `済（${normalizeGame(g).scores.join('対')}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
     if ((p.tags || []).length) {
       const tg = el('div', 'card-tags');
@@ -1730,6 +1863,38 @@ const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', q: '' 
 function loadFilter() { return { ...NO_FILTER, ...load('filter', {}) }; }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
+function renderGroupBar() {
+  const sel = document.getElementById('group-select');
+  sel.textContent = '';
+  loadGroups().forEach(g => sel.appendChild(new Option(`${g.name}（${g.players.join('・')}${g.npc ? '＋AI' : ''}）`, g.id)));
+  sel.value = currentGroup().id;
+}
+let editingGroupId = null;
+function openGroup(g) {
+  editingGroupId = g ? g.id : null;
+  document.getElementById('g-title').textContent = g ? 'グループを編集' : '新しいグループ';
+  document.getElementById('g-name').value = g ? g.name : '';
+  document.getElementById('g-players').value = g ? g.players.join('\n') : '';
+  document.getElementById('g-npc').checked = g ? g.npc : true;
+  document.getElementById('g-delete').classList.toggle('hidden', !g || g.id === 'solo');
+  document.getElementById('g-error').textContent = '';
+  document.getElementById('group-modal').classList.remove('hidden');
+}
+function saveGroupFromForm() {
+  const name = document.getElementById('g-name').value.trim().slice(0, 30);
+  const players = [...new Set(document.getElementById('g-players').value.split('\n').map(x => x.trim().slice(0, 20)).filter(Boolean))];
+  const npc = document.getElementById('g-npc').checked;
+  if (!name) throw new Error('グループ名を入れてください');
+  if (!players.length) throw new Error('プレイヤーを1人以上入れてください');
+  if (players.length > 8) throw new Error('プレイヤーは8人までです');
+  const groups = loadGroups();
+  const id = editingGroupId || 'g' + Date.now().toString(36);
+  const g = { id, name, players, npc };
+  const i = groups.findIndex(x => x.id === id);
+  if (i >= 0) groups[i] = g; else groups.push(g);
+  save('groups', groups);
+  save('group', id);
+}
 function toggleFavorite(id) {
   const favs = load('favorites', []);
   save('favorites', favs.includes(id) ? favs.filter(x => x !== id) : [...favs, id]);
@@ -1983,6 +2148,26 @@ document.getElementById('btn-back').onclick = showList;
 document.getElementById('btn-ask').onclick = () => playerMove('question');
 document.getElementById('btn-answer').onclick = () => playerMove('answer');
 document.getElementById('btn-giveup').onclick = giveUp;
+document.getElementById('btn-undo').onclick = undoMove;
+document.getElementById('btn-share-progress').onclick = shareProgress;
+document.getElementById('group-select').onchange = e => { save('group', e.target.value); renderList(); };
+document.getElementById('btn-group-new').onclick = () => openGroup(null);
+document.getElementById('btn-group-edit').onclick = () => openGroup(currentGroup());
+document.getElementById('g-cancel').onclick = () => document.getElementById('group-modal').classList.add('hidden');
+document.getElementById('g-save').onclick = () => {
+  try { saveGroupFromForm(); document.getElementById('group-modal').classList.add('hidden'); renderList(); }
+  catch (e) { document.getElementById('g-error').textContent = e.message; }
+};
+document.getElementById('g-delete').onclick = () => {
+  const g = loadGroups().find(x => x.id === editingGroupId);
+  if (!g || g.id === 'solo') return;
+  if (!confirm(`「${g.name}」を削除しますか？\n（このグループの進み具合も消えます）`)) return;
+  save('groups', loadGroups().filter(x => x.id !== g.id));
+  try { localStorage.removeItem(LS + gamesKey(g.id)); } catch (e) { /* 消せなくても動作に影響しない */ }
+  save('group', 'solo');
+  document.getElementById('group-modal').classList.add('hidden');
+  renderList();
+};
 document.getElementById('input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); playerMove('question'); }
 });
