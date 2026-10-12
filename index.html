@@ -131,6 +131,12 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .card-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .card-tags .tag { border: none; background: none; padding: 0; font-size: 13px; color: var(--sub); cursor: pointer; }
 button.link { border: none; background: none; padding: 0; color: var(--you); text-decoration: underline; font-size: inherit; cursor: pointer; }
+.about h3 { font-size: 15px; margin: 18px 0 6px; }
+.about ul { padding-left: 1.2em; margin: 0; }
+.about li { margin: 4px 0; }
+.about-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.about-table td { border-bottom: 1px solid var(--line); padding: 6px 4px; }
+.about-table td:last-child { text-align: right; white-space: nowrap; font-weight: bold; }
 .card-head { display: flex; align-items: flex-start; gap: 8px; }
 .card-head h2 { flex: 1; min-width: 0; }
 .fav { border: none; background: none; font-size: 22px; line-height: 1; padding: 0 2px; color: var(--sub); cursor: pointer; }
@@ -177,13 +183,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   <header>
     <h1 id="title">本当にあった怖いスープ</h1>
     <button id="btn-back" class="hidden">一覧</button>
+    <button id="btn-about">遊び方</button>
     <button id="btn-settings">設定</button>
   </header>
   <main id="view-list">
     <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
-    重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
+    重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。
+    <button class="link" id="intro-about">くわしい遊び方</button></p>
     <div class="filters">
-      <input type="search" id="f-q" placeholder="キーワードで探す（題名・問題文・タグ・作者）" aria-label="キーワード">
+      <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
       <select id="f-author" aria-label="作者"></select>
       <select id="f-diff" aria-label="難易度">
         <option value="">難易度：すべて</option><option>初級</option><option>中級</option><option>上級</option>
@@ -249,6 +257,50 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="row">
       <button id="add-puzzle-cancel">閉じる</button>
       <button id="add-puzzle-ok" class="primary">追加</button>
+    </div>
+  </div>
+</div>
+
+<div id="about" class="overlay hidden">
+  <div class="modal about">
+    <h2>本当にあった怖いスープとは</h2>
+    <p>実際にあった出来事の記録をもとにした、水平思考クイズ（ウミガメのスープ）です。不思議な状況だけが示されるので、「はい／いいえ」で答えられる質問を重ねて、なぜそうなったのかという真相を当てます。</p>
+    <p>出題はすべて、事故調査報告・航空安全報告・博物館の解説など、公開されている記録から作っています。答え合わせでは真相と出典が見られます。</p>
+
+    <h3>遊び方</h3>
+    <ul>
+      <li>あなたと <b>AIプレイヤー</b> が交互に1手ずつ、質問するか解答します</li>
+      <li><b>審判（AI）</b> が記録をもとに、質問に答えます</li>
+      <li>どちらかが真相を当てるか、「降参」すると終わり。得点の多いほうの勝ちです</li>
+      <li>手数に上限はありません。進行は自動で保存されるので、途中でやめても続きから遊べます</li>
+    </ul>
+
+    <h3>得点</h3>
+    <table class="about-table">
+      <tr><td>重要な事実を見つけた</td><td>＋1</td></tr>
+      <tr><td>真相を当てた</td><td>＋2</td></tr>
+      <tr><td>解答が外れた</td><td>−1</td></tr>
+      <tr><td>「関係ありません」「重要ではありません」「既出です」</td><td>−1</td></tr>
+      <tr><td>それ以外の答え</td><td>0</td></tr>
+    </table>
+    <p class="note">審判の答えは「はい／いいえ／部分的にはい／どちらとも言えない／重要ではありません／関係ありません／資料では不明／既出です」のどれかです。的外れな質問や聞き直しは減点されるので、よく考えて質問してください。</p>
+
+    <h3>問題を増やす・友達と遊ぶ</h3>
+    <ul>
+      <li>「＋ 問題を作る・追加する」で、Claude に新しい問題を作ってもらえます（Claude のアカウントが必要）</li>
+      <li>「問題集の保存・共有」で、自分の問題集を GitHub に保存し、招待リンクで友達に渡せます。友達に問題を追加してもらえば、答えを知らない問題を遊べます</li>
+      <li>1問だけなら、各問題の「共有」からリンクで渡せます</li>
+    </ul>
+
+    <h3>必要なもの</h3>
+    <ul>
+      <li>Google の Gemini APIキー（無料）。作り方は「設定」に載っています</li>
+      <li>任意：Groq の APIキー（無料。Gemini の無料枠を使い切ったときの予備）</li>
+    </ul>
+    <p class="note">キーや進行状況は、この端末のブラウザ内にだけ保存されます。質問の内容は Google（と、入れた場合は Groq）の AI に送られます。</p>
+
+    <div class="row">
+      <button id="about-close" class="primary">閉じる</button>
     </div>
   </div>
 </div>
@@ -441,7 +493,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.15';
+const APP_VERSION = 'v0.1.16';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -858,13 +910,16 @@ async function openInvite(code) {
   if (!d || !d.r || !d.t) throw new Error('招待リンクの形式が正しくありません。');
   if (d.r === myRepo.repo) { alert('これはあなた自身の問題集の招待リンクです。'); return; }
   const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
-  if (!confirm(`「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
+  const intro = settings.key || settings.groqKey ? '' :
+    '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIと交互に質問しながら解く水平思考クイズです。\n' +
+    '遊ぶには Google の Gemini APIキー（無料）が1つ要ります。作り方は次の画面で案内します。\n\n';
+  if (!confirm(`${intro}「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
   collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
   save('collections', collections);
   repoCache[d.r] = pkgs; save('repo-cache', repoCache);
   rebuildPuzzles();
-  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (d.w ? '\n「＋ 問題を作る・追加する」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
+  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (settings.key || settings.groqKey ? '' : '\n続けて、Gemini APIキーを設定してください。') + (d.w ? '\n「＋ 問題を作る・追加する」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
 }
 function removeCollection(repo) {
   collections = collections.filter(c => c.repo !== repo); save('collections', collections);
@@ -1754,6 +1809,10 @@ document.getElementById('set-save').onclick = () => {
 };
 document.getElementById('set-cancel').onclick = closeSettings;
 document.getElementById('btn-settings').onclick = openSettings;
+const openAbout = () => document.getElementById('about').classList.remove('hidden');
+document.getElementById('btn-about').onclick = openAbout;
+document.getElementById('intro-about').onclick = openAbout;
+document.getElementById('about-close').onclick = () => document.getElementById('about').classList.add('hidden');
 document.getElementById('btn-add-puzzle').onclick = () => {
   const writable = collections.filter(c => c.writable);
   const dest = document.getElementById('add-dest');
