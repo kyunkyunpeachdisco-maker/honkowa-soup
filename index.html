@@ -122,6 +122,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 #add-dest-wrap { margin-bottom: 8px; }
 #edit-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-family: ui-monospace, Menlo, monospace; font-size: 16px; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+#f-q { flex: 1 1 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .filters select { font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .tag-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
 .tag-chips::-webkit-scrollbar { display: none; }
@@ -182,6 +183,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <p class="intro">謎はすべて実話です。AIプレイヤーと交互に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。</p>
     <div class="filters">
+      <input type="search" id="f-q" placeholder="キーワードで探す（題名・問題文・タグ・作者）" aria-label="キーワード">
+      <select id="f-author" aria-label="作者"></select>
       <select id="f-diff" aria-label="難易度">
         <option value="">難易度：すべて</option><option>初級</option><option>中級</option><option>上級</option>
       </select>
@@ -189,6 +192,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
         <option value="">状態：すべて</option><option value="new">未プレイ</option><option value="playing">対戦中</option><option value="done">済</option>
       </select>
       <button id="btn-fav-only">☆ お気に入り</button>
+      <button id="btn-filter-clear" class="hidden">✕ 絞り込みを解除</button>
     </div>
     <div class="tag-chips" id="tag-chips"></div>
     <p class="note" id="filter-count"></p>
@@ -235,6 +239,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="step">
     <h3><span class="num">2</span>できた問題を貼り付ける</h3>
     <p class="note">Claude が返した問題データ（JSON）をそのまま貼り付けて「追加」を押してください。追加した問題はこの端末（データリポジトリを設定していればリポジトリ）に保存され、一覧の「共有」から1問ずつ友達にリンクで渡せます。</p>
+    <label>作者名（一覧に出ます。任意）
+    <input type="text" id="add-author" placeholder="例: たろう"></label>
     <label id="add-dest-wrap" class="hidden">保存先
     <select id="add-dest"></select></label>
     <textarea id="add-puzzle-text" rows="10" placeholder='{"title": "…", "question_text": "…", "source": {...}, "answer": {...}}'></textarea>
@@ -435,7 +441,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.14';
+const APP_VERSION = 'v0.1.15';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -537,6 +543,7 @@ function normalizePuzzle(d) {
       id, title, status: d.status || 'unverified',
       source: { type: d.source.type || 'web', title: String(d.source.title || d.source.url), url: String(d.source.url) },
       puzzle_type: d.puzzle_type || '追加', difficulty: d.difficulty || '中級', tags,
+      ...(d.author ? { author: String(d.author).trim().slice(0, 30) } : {}),
       question_text: String(d.question_text),
     },
     answer: {
@@ -778,6 +785,7 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 - \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
 - \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
 - \`tags\` はアプリの絞り込みに使う（任意）
+- \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。頼んだ人の名前が分かれば入れる
 - **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
 
 ## 問題を作るように頼まれたら
@@ -1581,6 +1589,18 @@ function renderList() {
     b.onclick = () => { setFilter({ tag: f.tag === t ? '' : t }); };
     chips.appendChild(b);
   });
+  // 作者：見本と、追加した問題の作者名
+  const authorOf = p => p.custom ? (p.author || '') : '見本';
+  const authors = [...new Set(puzzles.map(authorOf).filter(Boolean))].sort((a, b) => a === '見本' ? -1 : b === '見本' ? 1 : a.localeCompare(b));
+  const fa = document.getElementById('f-author');
+  fa.textContent = '';
+  fa.appendChild(new Option('作者：すべて', ''));
+  authors.forEach(a => fa.appendChild(new Option(a, a)));
+  fa.value = authors.includes(f.author) ? f.author : '';
+  const q = document.getElementById('f-q');
+  if (document.activeElement !== q) q.value = f.q;
+  const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
+  const textOf = p => [p.title, p.question_text, ...(p.tags || []), p.source && p.source.title, authorOf(p), p.puzzle_type].join(' ').toLowerCase();
   document.getElementById('f-diff').value = f.diff;
   document.getElementById('f-state').value = f.state;
   const favBtn = document.getElementById('btn-fav-only');
@@ -1588,15 +1608,14 @@ function renderList() {
   favBtn.classList.toggle('primary', f.fav);
   const shown = puzzles.filter(p =>
     (!f.tag || (p.tags || []).includes(f.tag)) && (!f.diff || p.difficulty === f.diff) &&
-    (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)));
-  const active = f.tag || f.diff || f.state || f.fav;
+    (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)) &&
+    (!f.author || authorOf(p) === f.author) && words.every(w => textOf(p).includes(w)));
+  const active = f.tag || f.diff || f.state || f.fav || f.author || words.length;
+  document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
   const count = document.getElementById('filter-count');
   count.textContent = '';
   if (active) {
-    count.append(`${puzzles.length}問中 ${shown.length}問を表示　`);
-    const clear = el('button', 'link', '絞り込みを解除');
-    clear.onclick = () => setFilter({ tag: '', diff: '', state: '', fav: false });
-    count.appendChild(clear);
+    count.append(`${puzzles.length}問中 ${shown.length}問を表示`);
   }
   if (active && !shown.length) box.appendChild(el('p', 'note', f.fav && !favs.length ? 'お気に入りはまだありません。問題の ☆ を押すと登録できます。' : '条件に合う問題がありません。'));
   shown.forEach(p => {
@@ -1609,6 +1628,7 @@ function renderList() {
     head.appendChild(star);
     c.appendChild(head);
     const meta = el('div', 'meta');
+    if (p.custom && p.author) meta.appendChild(el('span', '', `作：${p.author}`));
     if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}` : '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
@@ -1651,7 +1671,9 @@ function renderList() {
   });
 }
 
-function loadFilter() { return { tag: '', diff: '', state: '', fav: false, ...load('filter', {}) }; }
+const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', q: '' };
+function loadFilter() { return { ...NO_FILTER, ...load('filter', {}) }; }
+function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
 function toggleFavorite(id) {
   const favs = load('favorites', []);
@@ -1741,6 +1763,7 @@ document.getElementById('btn-add-puzzle').onclick = () => {
   dest.value = load('add-dest', '');
   if (dest.selectedIndex < 0) dest.value = '';
   document.getElementById('add-dest-wrap').classList.toggle('hidden', !writable.length);
+  document.getElementById('add-author').value = load('author-name', '');
   document.getElementById('add-puzzle-text').value = '';
   document.getElementById('add-puzzle-error').textContent = '';
   document.getElementById('add-puzzle').classList.remove('hidden');
@@ -1748,6 +1771,9 @@ document.getElementById('btn-add-puzzle').onclick = () => {
 document.getElementById('btn-gen-claude').onclick = genWithClaude;
 document.getElementById('btn-fav-only').onclick = () => setFilter({ fav: !loadFilter().fav });
 document.getElementById('f-diff').onchange = e => setFilter({ diff: e.target.value });
+document.getElementById('f-author').onchange = e => setFilter({ author: e.target.value });
+document.getElementById('f-q').oninput = e => setFilter({ q: e.target.value });
+document.getElementById('btn-filter-clear').onclick = clearFilter;
 document.getElementById('f-state').onchange = e => setFilter({ state: e.target.value });
 document.getElementById('edit-puzzle-cancel').onclick = () => document.getElementById('edit-puzzle').classList.add('hidden');
 document.getElementById('edit-puzzle-ok').onclick = async () => {
@@ -1767,6 +1793,9 @@ document.getElementById('add-puzzle-ok').onclick = async () => {
   const btn = document.getElementById('add-puzzle-ok');
   try {
     const pkgs = parsePuzzlesText(document.getElementById('add-puzzle-text').value);
+    const author = document.getElementById('add-author').value.trim().slice(0, 30);
+    save('author-name', author);
+    if (author) pkgs.forEach(p => { if (!p.pub.author) p.pub.author = author; });
     btn.disabled = true;
     const destRepo = document.getElementById('add-dest').value;
     save('add-dest', destRepo);
