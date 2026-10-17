@@ -596,7 +596,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.23';
+const APP_VERSION = 'v0.1.24';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -690,6 +690,7 @@ function normalizePuzzle(d) {
   if (!a.reveal || !a.reveal.summary) missing.push('reveal.summary（真相）');
   if (!d.source || !d.source.url) missing.push('source.url（出典）');
   if (missing.length) throw new Error('次の項目が足りません：' + missing.join('、'));
+  if (!isWebUrl(d.source.url)) throw new Error('source.url（出典）は http:// か https:// で始まるURLにしてください');
   const title = String(d.title || d.question_text.slice(0, 16));
   const id = hasUniqueId(String(d.id || '')) ? String(d.id) : newId(d.id);
   const tags = Array.isArray(d.tags) ? [...new Set(d.tags.map(t => String(t).trim()).filter(Boolean))].slice(0, 6) : [];
@@ -1487,6 +1488,7 @@ function giveUp() {
 }
 
 // ---- 描画 ----
+function isWebUrl(u) { return /^https?:\/\//i.test(String(u || '').trim()); }
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -2035,7 +2037,8 @@ function appendAnswer(box, p, ans, g) {
   }), 'ol'));
   const src = el('p');
   const a = el('a', '', p.source.title);
-  a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener';
+  // javascript: などのURLはリンクにしない（共有された問題に仕込まれても、クリックでスクリプトが動かないように）
+  if (isWebUrl(p.source.url)) { a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener'; }
   src.appendChild(a);
   sec('出典', src);
   box.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
