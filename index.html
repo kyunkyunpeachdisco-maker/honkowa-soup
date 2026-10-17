@@ -596,7 +596,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.22';
+const APP_VERSION = 'v0.1.23';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1589,6 +1589,7 @@ function resultSummary() {
 
 // shared: 共有リンクから開いた結果（自分の対戦ではない）
 function showReveal(shared) {
+  hostExport = null;
   show('reveal');
   document.getElementById('title').textContent = game.puzzle.title;
   const page = document.getElementById('view-reveal');
@@ -1604,41 +1605,7 @@ function showReveal(shared) {
   v.appendChild(el('h2', '', '問題'));
   v.appendChild(el('p', 'question', game.puzzle.question_text));
 
-  if (shownHints().length) {
-    v.appendChild(el('h2', '', `開いたヒント（${shownHints().length}個）`));
-    const hl = el('ol');
-    shownHints().forEach(t => hl.appendChild(el('li', '', t)));
-    v.appendChild(hl);
-  }
-
-  v.appendChild(el('h2', '', '重要な事実'));
-  const ul = el('ul');
-  answerData.discoveries.forEach(d => {
-    const by = game.found[d.id];
-    const li = el('li', '', d.fact);
-    const has = by !== undefined && by !== null;
-    li.appendChild(el('span', 'note', has ? `（${pName(by)}が発見）` : '（未発見）'));
-    if (has) li.style.color = `var(--${pCls(by)})`;
-    ul.appendChild(li);
-  });
-  v.appendChild(ul);
-
-  v.appendChild(el('h2', '', '真相'));
-  v.appendChild(el('p', '', answerData.reveal.summary));
-  const chain = el('div', 'chain');
-  answerData.reveal.causal_chain.forEach((c, i) => {
-    if (i) chain.appendChild(el('i', '', '→'));
-    chain.appendChild(el('span', '', c));
-  });
-  v.appendChild(chain);
-
-  v.appendChild(el('h2', '', '出典'));
-  const src = el('p');
-  const a = el('a', '', game.puzzle.source.title);
-  a.href = game.puzzle.source.url; a.target = '_blank'; a.rel = 'noopener';
-  src.appendChild(a);
-  v.appendChild(src);
-  v.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
+  appendAnswer(v, game.puzzle, answerData, game);
 
   v.appendChild(el('h2', '', '対戦の記録'));
   const t = el('table', 'log-table');
@@ -1688,16 +1655,10 @@ function who(by) { return pName(by); }
 function resultText(md) {
   const r = resultSummary();
   const h = t => md ? `## ${t}` : `【${t}】`;
-  const li = t => md ? `- ${t}` : `・${t}`;
   const lines = [
     md ? `# 本当にあった怖いスープ「${game.puzzle.title}」` : `本当にあった怖いスープ「${game.puzzle.title}」`,
     '', `${md ? '**' : ''}${r.line}${md ? '**' : ''}`, r.sub, '',
-    h('問題'), game.puzzle.question_text, '',
-    ...(shownHints().length ? [h('開いたヒント'), ...shownHints().map((t, i) => `${i + 1}. ${t}`), ''] : []),
-    h('重要な事実'),
-    ...answerData.discoveries.map(d => li(`${d.fact}（${d.id in game.found ? who(game.found[d.id]) + 'が発見' : '未発見'}）`)), '',
-    h('真相'), answerData.reveal.summary, '', answerData.reveal.causal_chain.join(' → '), '',
-    h('出典'), md ? `[${game.puzzle.source.title}](${game.puzzle.source.url})` : `${game.puzzle.source.title}\n${game.puzzle.source.url}`, '',
+    ...answerLines(game.puzzle, answerData, md, game),
     h('対戦の記録'),
     ...game.moves.map((m, i) => (md ? `${i + 1}. ` : `${i + 1}. `) + `${who(m.by)}の${m.kind === 'question' ? '質問' : '解答'}：${m.text} → ${m.reply}（${ptsLabel(m.pts)}）`),
     '', APP_URL,
@@ -1724,13 +1685,16 @@ async function saveFile(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   return true;
 }
-function fileBase() { return `honkowa-soup_${game.puzzleId}`; }
+// 人が出題者の画面（問題の閲覧）から書き出すときは、対戦ではなくその問題の中身を書き出す
+let hostExport = null;   // { id, text(md) }
+function fileBase() { return `honkowa-soup_${hostExport ? hostExport.id : game.puzzleId}`; }
+function exportBody(md) { return hostExport ? hostExport.text(md) : resultText(md); }
 
 async function exportText() {
-  exportMsg(await copyText(resultText(false)) ? 'テキストをコピーしました' : 'コピーできませんでした');
+  exportMsg(await copyText(exportBody(false)) ? 'テキストをコピーしました' : 'コピーできませんでした');
 }
 async function exportMarkdown() {
-  if (await saveFile(new Blob([resultText(true)], { type: 'text/markdown' }), `${fileBase()}.md`)) exportMsg('Markdownを書き出しました');
+  if (await saveFile(new Blob([exportBody(true)], { type: 'text/markdown' }), `${fileBase()}.md`)) exportMsg('Markdownを書き出しました');
 }
 function exportPdf() {
   exportMsg('印刷画面で「PDFとして保存」（iPhoneは共有→「ファイルに保存」）を選んでください');
@@ -1985,51 +1949,110 @@ async function openHost(p) {
   const page = document.getElementById('view-reveal');
   page.textContent = '';
   page.scrollTop = 0;
-  page.appendChild(el('div', 'result-title', `本当にあった怖いスープ「${p.title}」・${p.difficulty}`));
-  page.appendChild(el('h2', '', '問題'));
-  page.appendChild(el('p', 'host-question', p.question_text));
-  page.appendChild(el('p', 'note', '出題者が読み上げるか、この画面をみんなに見せてください。みんなは「はい／いいえ」で答えられる質問をします。'));
+  const card = el('div'); card.id = 'result-card';
+  page.appendChild(card);
+  card.appendChild(el('div', 'result-title', `本当にあった怖いスープ「${p.title}」・${p.difficulty}`));
+  card.appendChild(el('h2', '', '問題'));
+  card.appendChild(el('p', 'host-question', p.question_text));
+  const how = el('p', 'note', '出題者が読み上げるか、この画面をみんなに見せてください。みんなは「はい／いいえ」で答えられる質問をします。');
   const acts = el('div', 'host-actions');
   const btn = el('button', 'primary', '出題者用：答えを見る');
   acts.appendChild(btn);
-  page.appendChild(acts);
+  how.setAttribute('data-html2canvas-ignore', ''); acts.setAttribute('data-html2canvas-ignore', '');
+  card.append(how, acts);
   const box = el('div', 'host-answer hidden');
+  appendAnswer(box, p, ans);
+  box.appendChild(el('p', 'note', `本当にあった怖いスープ  ${APP_URL}`));
+  card.appendChild(box);
+
+  // 書き出しは答えを開いたときだけ出す（中身に答えが入るため）
+  hostExport = { id: p.id, text: md => hostText(p, ans, md) };
+  const ex = el('div', 'export hidden');
+  ex.appendChild(el('h2', '', '問題と答えを書き出す'));
+  const exRow = el('div', 'export-row');
+  const exps = [['テキストをコピー', exportText], ['Markdownで保存', exportMarkdown], ['PDFで保存', exportPdf], ['画像で保存', exportImage]];
+  if (pkgIndex[p.id]) exps.push(['問題の共有リンク', () => sharePuzzle(p.id)]);
+  exps.forEach(([label, fn]) => { const b = el('button', '', label); b.onclick = () => fn(b); exRow.appendChild(b); });
+  ex.appendChild(exRow);
+  ex.appendChild(el('p', 'note export-msg', ''));
+  page.appendChild(ex);
+  const row = el('p', 'reveal-actions');
+  const back = el('button', 'primary', '問題一覧へ');
+  back.onclick = showList;
+  row.appendChild(back);
+  page.appendChild(row);
+
+  btn.onclick = () => {
+    if (box.classList.contains('hidden')) {
+      if (!confirm('答えを表示します。出題者だけが見てください。')) return;
+      box.classList.remove('hidden'); ex.classList.remove('hidden'); btn.textContent = '答えを隠す';
+    } else {
+      box.classList.add('hidden'); ex.classList.add('hidden'); btn.textContent = '出題者用：答えを見る';
+      page.scrollTop = 0;
+    }
+  };
+}
+function hostText(p, ans, md) {
+  return [
+    md ? `# 本当にあった怖いスープ「${p.title}」` : `本当にあった怖いスープ「${p.title}」`,
+    `難易度：${p.difficulty}`, '',
+    ...answerLines(p, ans, md),
+    APP_URL,
+  ].join('\n');
+}
+// 問題と答えの中身。AI審判の結果画面と人が出題者の画面で共通（g があれば対戦の結果＝誰が見つけたか・開いたヒントを添える）
+function appendAnswer(box, p, ans, g) {
   const sec = (t, node) => { box.appendChild(el('h2', '', t)); box.appendChild(node); };
   const list = (items, tag = 'ul') => { const l = el(tag); items.forEach(x => l.appendChild(typeof x === 'string' ? el('li', '', x) : x)); return l; };
-  // AI審判の結果画面と同じ並び（重要な事実→真相→出典）。そのあとに出題者だけが使う資料を置く
-  sec('重要な事実', list(ans.discoveries.map(d => d.fact)));
-  box.appendChild(el('p', 'note', '質問で確かめられたら、見つけた人に＋1などにします。'));
+  sec('重要な事実', list(ans.discoveries.map(d => {
+    const li = el('li', '', d.fact);
+    if (g) {
+      const by = g.found[d.id], has = by !== undefined && by !== null;
+      li.appendChild(el('span', 'note', has ? `（${pName(by)}が発見）` : '（未発見）'));
+      if (has) li.style.color = `var(--${pCls(by)})`;
+    }
+    return li;
+  })));
+  if (!g) box.appendChild(el('p', 'note', '質問で確かめられたら、見つけた人に＋1などにします。'));
   sec('真相', el('p', '', ans.reveal.summary));
   if (ans.reveal.causal_chain.length) {
     const chain = el('div', 'chain');
     ans.reveal.causal_chain.forEach((s, i) => { if (i) chain.appendChild(el('i', '', '→')); chain.appendChild(el('span', '', s)); });
     box.appendChild(chain);
   }
-  const src = el('p');
-  const a = el('a', '', p.source.title);
-  a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener';
-  src.appendChild(a);
-  sec('出典', src);
-  box.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
-  box.appendChild(el('div', 'result-title', '出題者用の資料'));
   sec('正解の条件', el('p', '', ans.answer_criteria));
   sec('質問に答えるための資料', list(ans.reference_facts.map(f => {
     const li = el('li', '', f.fact);
     if (f.layer === 'reporter_claim') li.appendChild(el('span', 'claim', '（本人の申告）'));
     return li;
   })));
-  box.appendChild(el('p', 'note', '資料に書かれていないことを聞かれたら「分かりません」、真相に関係ない質問は「関係ありません」と答えます。'));
-  if ((ans.hints || []).length) sec('ヒント（行き詰まったら、弱い順に1つずつ読み上げる）', list(ans.hints, 'ol'));
-  page.appendChild(box);
-  btn.onclick = () => {
-    if (box.classList.contains('hidden')) {
-      if (!confirm('答えを表示します。出題者だけが見てください。')) return;
-      box.classList.remove('hidden'); btn.textContent = '答えを隠す';
-    } else {
-      box.classList.add('hidden'); btn.textContent = '出題者用：答えを見る';
-      page.scrollTop = 0;
-    }
-  };
+  if (!g) box.appendChild(el('p', 'note', '資料に書かれていないことを聞かれたら「分かりません」、真相に関係ない質問は「関係ありません」と答えます。'));
+  const hints = ans.hints || [], opened = g ? g.hints || 0 : 0;
+  if (hints.length) sec(g ? `ヒント（開いたのは${opened}個）` : 'ヒント（行き詰まったら、弱い順に1つずつ読み上げる）', list(hints.map((t, i) => {
+    const li = el('li', '', t);
+    if (i < opened) li.appendChild(el('span', 'note', '（開いた）'));
+    return li;
+  }), 'ol'));
+  const src = el('p');
+  const a = el('a', '', p.source.title);
+  a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener';
+  src.appendChild(a);
+  sec('出典', src);
+  box.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
+}
+function answerLines(p, ans, md, g) {
+  const h = t => md ? `## ${t}` : `【${t}】`;
+  const li = t => md ? `- ${t}` : `・${t}`;
+  const opened = g ? g.hints || 0 : 0;
+  return [
+    h('問題'), p.question_text, '',
+    h('重要な事実'), ...ans.discoveries.map(d => li(g ? `${d.fact}（${d.id in g.found ? who(g.found[d.id]) + 'が発見' : '未発見'}）` : d.fact)), '',
+    h('真相'), ans.reveal.summary, '', ans.reveal.causal_chain.join(' → '), '',
+    h('正解の条件'), ans.answer_criteria, '',
+    h('質問に答えるための資料'), ...ans.reference_facts.map(f => li(f.fact + (f.layer === 'reporter_claim' ? '（本人の申告）' : ''))), '',
+    ...((ans.hints || []).length ? [h(g ? `ヒント（開いたのは${opened}個）` : 'ヒント'), ...ans.hints.map((t, i) => `${i + 1}. ${t}${i < opened ? '（開いた）' : ''}`), ''] : []),
+    h('出典'), md ? `[${p.source.title}](${p.source.url})` : `${p.source.title}\n${p.source.url}`, '',
+  ];
 }
 
 const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', q: '' };
