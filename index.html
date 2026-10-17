@@ -54,13 +54,17 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .hidden { display: none !important; }
 
 /* 問題一覧 */
-.intro { color: var(--sub); font-size: 14px; margin: 0 0 16px; }
+.intro { color: var(--sub); font-size: 14px; margin: 0 0 14px; }
 .card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
   padding: 14px 16px; margin-bottom: 12px; cursor: pointer;
 }
 .card h2 { font-size: 16px; margin: 0 0 4px; }
-.card .meta { font-size: 13px; color: var(--sub); }
+.card .meta { font-size: 13px; color: var(--sub); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.card .meta .badge { margin-right: 0; }
+.state { font-size: 12px; padding: 0 8px; border-radius: 99px; border: 1px solid var(--line); }
+.state.playing { border-color: var(--you); color: var(--you); }
+.state.done { color: var(--sub); }
 .badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--chip); margin-right: 4px; }
 
 /* 対戦画面 */
@@ -77,8 +81,13 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .turn-now { font-weight: 600; margin-bottom: 6px; }
 .board-ops { display: flex; gap: 12px; align-items: center; margin-top: 6px; font-size: 14px; }
 .board-ops button { padding: 4px 10px; font-size: 13px; }
-.group-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; }
-.group-bar select { flex: 1 1 200px; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.hints { margin: 0 0 8px; padding: 6px 10px 6px 2em; background: var(--chip); border-radius: 8px; font-size: 14px; max-height: 20dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.hints li { margin: 2px 0; }
+.group-bar { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
+.group-label { flex: none; font-size: 13px; color: var(--sub); }
+.group-bar select { flex: 1; min-width: 0; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.group-bar button { flex: none; padding: 6px 12px; font-size: 14px; }
+#btn-group-new { font-size: 18px; line-height: 1; padding: 7px 12px; }
 #g-players { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 4px; }
 .modal label.check { display: flex; gap: 8px; align-items: center; }
 .modal label.check input { width: auto; margin: 0; }
@@ -132,10 +141,16 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 #gen-theme { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; }
 #add-dest-wrap { margin-bottom: 8px; }
 #edit-puzzle-text { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-family: ui-monospace, Menlo, monospace; font-size: 16px; }
-.filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
-#f-q { flex: 1 1 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
-.filters select { font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.search-row { display: flex; gap: 8px; margin: 0 0 8px; }
+#f-q { flex: 1; min-width: 0; font-size: 16px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.search-row button { flex: none; padding: 6px 12px; font-size: 14px; }
+.search-row button.on { border-color: var(--accent); color: var(--accent); }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 8px; }
+.filters select { min-width: 0; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .tag-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+#tag-chips { display: contents; }
+.filter-count { display: flex; gap: 12px; align-items: baseline; font-size: 13px; color: var(--sub); margin: 6px 0 10px; }
+.filter-count .link { font-size: 13px; }
 .tag-chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; font-size: 13px; padding: 4px 10px; border-radius: 999px; }
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -202,12 +217,16 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。
     <button class="link" id="intro-about">くわしい遊び方</button></p>
     <div class="group-bar">
+      <span class="group-label">遊ぶ人</span>
       <select id="group-select" aria-label="遊ぶグループ"></select>
       <button id="btn-group-edit">編集</button>
-      <button id="btn-group-new">＋ グループ</button>
+      <button id="btn-group-new" aria-label="グループを追加" title="グループを追加">＋</button>
     </div>
-    <div class="filters">
+    <div class="search-row">
       <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
+      <button id="btn-filter-toggle" aria-expanded="false">絞り込み</button>
+    </div>
+    <div class="filters hidden" id="filter-panel">
       <select id="f-author" aria-label="作者"></select>
       <select id="f-diff" aria-label="難易度">
         <option value="">難易度：すべて</option><option>初級</option><option>中級</option><option>上級</option>
@@ -215,11 +234,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <select id="f-state" aria-label="状態">
         <option value="">状態：すべて</option><option value="new">未プレイ</option><option value="playing">対戦中</option><option value="done">済</option>
       </select>
-      <button id="btn-fav-only">☆ お気に入り</button>
-      <button id="btn-filter-clear" class="hidden">✕ 絞り込みを解除</button>
     </div>
-    <div class="tag-chips" id="tag-chips"></div>
-    <p class="note" id="filter-count"></p>
+    <div class="tag-chips"><button id="btn-fav-only" class="chip">☆ お気に入り</button><span id="tag-chips"></span></div>
+    <p class="filter-count" id="filter-count"><span id="filter-count-text"></span><button id="btn-filter-clear" class="link hidden">絞り込みを解除</button></p>
     <div id="puzzle-list"></div>
     <p class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加する</button>
     <button id="btn-library">問題集の保存・共有</button></p>
@@ -230,12 +247,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div id="game">
       <div class="board">
         <p class="question" id="q-text"></p>
+        <ol class="hints hidden" id="hint-list"></ol>
         <div class="scores">
           <span id="score-list"></span>
           <span class="turns"><span id="s-turns">0</span>手目</span>
         </div>
         <div class="board-ops">
           <button id="btn-share-progress">問題と経過を共有</button>
+          <button id="btn-hint">ヒント</button>
           <button id="btn-undo" class="link">1手戻す</button>
         </div>
       </div>
@@ -314,6 +333,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <li>だれかが真相を当てるか、「降参」すると終わり。得点がいちばん多い人の勝ちです</li>
       <li>手数に上限はありません。進行は自動で保存されるので、途中でやめても続きから遊べます</li>
       <li>入力を間違えたときは「1手戻す」で、最後の質問を取り消せます（得点も元に戻ります）</li>
+      <li>行き詰まったら「ヒント」。みんなが同意したら1つずつ開きます。全員（AIプレイヤーも）に見え、得点は変わらず手番も使いません</li>
     </ul>
 
     <h3>みんなで遊ぶ</h3>
@@ -542,7 +562,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.17';
+const APP_VERSION = 'v0.1.18';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -652,6 +672,7 @@ function normalizePuzzle(d) {
       discoveries: a.discoveries.map((x, i) => ({ id: String(x.id || 'd' + (i + 1)), fact: String(x.fact || x), evidence: String(x.evidence || '') })),
       reference_facts: a.reference_facts.map(x => ({ fact: String(x.fact || x), layer: String(x.layer || 'confirmed') })),
       reveal: { summary: String(a.reveal.summary), causal_chain: Array.isArray(a.reveal.causal_chain) ? a.reveal.causal_chain.map(String) : [] },
+      ...(Array.isArray(a.hints) && a.hints.length ? { hints: a.hints.map(String).filter(Boolean).slice(0, 5) } : {}),
     },
   };
 }
@@ -673,6 +694,7 @@ const GEN_EXAMPLE = {
     discoveries: [{ id: 'd1', fact: '真相にたどり着くための重要な事実', evidence: '資料のどこに書いてあるか' }],
     reference_facts: [{ fact: '資料に書かれた事実（審判が質問に答えるのに使う）', layer: 'confirmed' }],
     reveal: { summary: '真相の説明（資料に書かれた範囲で）', causal_chain: ['きっかけ', '…', '結果'] },
+    hints: ['弱いヒント（考える方向だけを示す）', '中くらいのヒント', '強いヒント（真相そのものは書かない）'],
   },
 };
 // 作り方（検索先・題材の条件・ルール）。指示文とデータリポジトリの案内ファイルで共用する
@@ -695,6 +717,7 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 - tags は題材の分野を表す日本語の短い言葉を2〜4個（例：航空・船・鉄道・医療・鉱山・戦争・道具・動物・におい）。既存の問題と同じ言葉をなるべく使う
 - answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る
 - discoveries は真相にたどり着くための重要な事実を3〜5個
+- hints は行き詰まったときのヒントを2〜3個、弱い順に。資料の事実だけを使い、真相や answer_criteria の要素をそのまま書かない
 - reference_facts は審判が質問に答えるための資料。本文の事実を6〜12個、日本語で。layer は資料にそのまま書かれた事実なら "confirmed"、体験者本人の申告なら "reporter_claim"
 - 文章はすべて日本語`;
 }
@@ -886,6 +909,7 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 - \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
 - \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
 - \`tags\` はアプリの絞り込みに使う（任意）
+- \`answer.hints\` は対戦中に全員の合意で1つずつ開くヒント（任意。弱い順に2〜3個）
 - \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。頼んだ人の名前が分かれば入れる
 - **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
 
@@ -1144,6 +1168,13 @@ function historyText(game) {
   }).join('\n');
 }
 
+// 開いたヒント（全員に公開。審判・AIプレイヤーにも渡す）
+function shownHints(g = game, a = answerData) { return ((a && a.hints) || []).slice(0, g.hints || 0); }
+function hintsText(g, a) {
+  const h = shownHints(g, a);
+  return h.length ? `【公開済みのヒント】（ぼかした手がかり。内容を具体的に確かめる質問は既出扱いにしない）\n${h.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n` : '';
+}
+
 const GM_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスープ」の出題者（GM）です。実話の資料だけを根拠に、公平に判定します。
 - この事例で起きた出来事（誰が・何を・いつ・なぜ・どうなった）は【資料の事実】だけで判定する。資料にない出来事を推測で補わない
 - ただし、言葉の意味や一般常識についての質問（例：「マーカーはおもちゃか」「塗り絵は子供がよくすることか」）は、資料にある物事を前提に常識で答えてよい
@@ -1155,7 +1186,7 @@ async function askGM(kind, text, game, answer) {
   const puzzle = game.puzzle;
   const facts = answer.reference_facts.map(f => `- ${f.fact}（${f.layer}）`).join('\n');
   const disc = answer.discoveries.map(d => `- ${d.id}: ${d.fact}${game.found[d.id] ? '（発見済み）' : ''}`).join('\n');
-  const common = `【問題文】\n${puzzle.question_text}\n\n【真相】\n${answer.reveal.summary}\n\n【正解条件】\n${answer.answer_criteria}\n\n【資料の事実】\n${facts}\n\n【発見点】\n${disc}\n\n【これまでの質問と回答】\n${historyText(game)}`;
+  const common = `【問題文】\n${puzzle.question_text}\n\n${hintsText(game, answer)}【真相】\n${answer.reveal.summary}\n\n【正解条件】\n${answer.answer_criteria}\n\n【資料の事実】\n${facts}\n\n【発見点】\n${disc}\n\n【これまでの質問と回答】\n${historyText(game)}`;
   if (kind === 'question') {
     const prompt = `${common}
 
@@ -1207,7 +1238,7 @@ async function rivalMove(game, onRetry) {
   const confirmed = game.moves.filter(m => m.reply === 'はい' || m.reply === '部分的にはい').length;
   const canAnswer = confirmed >= RIVAL_MIN_CONFIRMED;
   const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。`;
-  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】${game.players.map((p, i) => `${p.ai ? 'あなた（AIプレイヤー）' : p.name}${game.scores[i]}点`).join('、')}${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
+  const prompt = `【問題文】\n${game.puzzle.question_text}\n\n${hintsText(game, answerData)}【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】${game.players.map((p, i) => `${p.ai ? 'あなた（AIプレイヤー）' : p.name}${game.scores[i]}点`).join('、')}${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
   let r = await callAI('rival', RIVAL_SYSTEM, prompt, 0.7);
   // 解答できない段階で解答を返したら、質問を出し直させる（質問扱いにすると審判が解答とみなして素通りするため）
   for (let i = 0; i < 2 && !canAnswer && r.type === 'answer'; i++) {
@@ -1374,6 +1405,7 @@ function undoMove() {
 // 問題文と経過（質問・回答・得点・次の手番）を LINE などに貼れる文章にする。答えは含めない
 async function shareProgress() {
   const lines = [`本当にあった怖いスープ「${game.puzzle.title}」`, '', '【問題】', game.puzzle.question_text];
+  if (shownHints().length) lines.push('', '【ヒント】', ...shownHints().map((t, i) => `${i + 1}. ${t}`));
   if (game.moves.length) {
     lines.push('', '【これまでの質問と回答】', ...game.moves.map((m, i) => `${i + 1}. ${pName(m.by)}の${m.kind === 'question' ? '質問' : '解答'}：${m.text} → ${m.reply}`));
     lines.push('', `【得点】${scoresLine()}`);
@@ -1386,6 +1418,29 @@ async function shareProgress() {
     catch (e) { if (e.name === 'AbortError') return; }
   }
   alert(await copyText(text) ? '問題文と経過をコピーしました。LINE などに貼り付けてください。' : 'コピーできませんでした。');
+}
+
+// ヒント：得点は変わらず手番も使わない。全員の合意で1つずつ開き、全員に見える
+function renderHints() {
+  const all = (answerData && answerData.hints) || [];
+  const shown = shownHints();
+  const list = document.getElementById('hint-list');
+  list.textContent = '';
+  shown.forEach(t => list.appendChild(el('li', '', t)));
+  list.classList.toggle('hidden', !shown.length);
+  const b = document.getElementById('btn-hint');
+  b.classList.toggle('hidden', !all.length || game.finished);
+  b.textContent = shown.length < all.length ? `ヒント（残り${all.length - shown.length}）` : 'ヒントは全部出ました';
+  b.disabled = busy || shown.length >= all.length;
+}
+function openHint() {
+  const all = (answerData && answerData.hints) || [];
+  const n = game.hints || 0;
+  if (busy || game.finished || n >= all.length) return;
+  if (!confirm(`ヒント${n + 1}（全${all.length}個）を開きますか？\n\n全員に見えます。みんなが同意してから開いてください。\n得点は変わらず、手番も使いません。`)) return;
+  game.hints = n + 1;
+  saveGame();
+  renderGame();
 }
 
 function giveUp() {
@@ -1410,6 +1465,7 @@ function renderGame() {
   sl.textContent = '';
   game.players.forEach((p, i) => sl.appendChild(el('span', `p ${pCls(i)}${i === game.turn && !game.finished ? ' now' : ''}`, `${p.name} ${game.scores[i]}`)));
   document.getElementById('turn-now').textContent = game.finished ? '' : `${pName(game.turn)}の番です`;
+  renderHints();
   document.getElementById('btn-undo').classList.toggle('hidden', game.finished || !game.moves.some(m => !game.players[m.by].ai));
   document.getElementById('s-turns').textContent = game.moves.length + (game.finished ? 0 : 1);
   const h = document.getElementById('history');
@@ -1513,6 +1569,13 @@ function showReveal(shared) {
   v.appendChild(el('h2', '', '問題'));
   v.appendChild(el('p', 'question', game.puzzle.question_text));
 
+  if (shownHints().length) {
+    v.appendChild(el('h2', '', `開いたヒント（${shownHints().length}個）`));
+    const hl = el('ol');
+    shownHints().forEach(t => hl.appendChild(el('li', '', t)));
+    v.appendChild(hl);
+  }
+
   v.appendChild(el('h2', '', '重要な事実'));
   const ul = el('ul');
   answerData.discoveries.forEach(d => {
@@ -1595,6 +1658,7 @@ function resultText(md) {
     md ? `# 本当にあった怖いスープ「${game.puzzle.title}」` : `本当にあった怖いスープ「${game.puzzle.title}」`,
     '', `${md ? '**' : ''}${r.line}${md ? '**' : ''}`, r.sub, '',
     h('問題'), game.puzzle.question_text, '',
+    ...(shownHints().length ? [h('開いたヒント'), ...shownHints().map((t, i) => `${i + 1}. ${t}`), ''] : []),
     h('重要な事実'),
     ...answerData.discoveries.map(d => li(`${d.fact}（${d.id in game.found ? who(game.found[d.id]) + 'が発見' : '未発見'}）`)), '',
     h('真相'), answerData.reveal.summary, '', answerData.reveal.causal_chain.join(' → '), '',
@@ -1712,6 +1776,7 @@ async function encodeResult() {
   const data = {
     v: 2, p: game.puzzleId, n: game.players.map(p => p.name), a: game.players.findIndex(p => p.ai), s: game.scores, r: game.result, f: game.found,
     m: game.moves.map(m => [m.by, m.kind === 'question' ? 'q' : 'a', m.text, m.reply, m.pts, m.discovery || '']),
+    ...(game.hints ? { h: game.hints } : {}),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(data));
   if (window.CompressionStream) return 'z' + b64url(await pipeBytes(bytes, new CompressionStream('deflate-raw')));
@@ -1732,7 +1797,7 @@ async function decodeResult(code) {
     return { puzzleId: d.p, puzzle, players, found, scores: d.s, turn: 0, finished: true, result: res, moves };
   }
   const players = d.n.map((name, i) => ({ name, ai: i === d.a }));
-  return { puzzleId: d.p, puzzle, players, found: d.f || {}, scores: d.s, turn: 0, finished: true, result: d.r, moves };
+  return { puzzleId: d.p, puzzle, players, found: d.f || {}, scores: d.s, turn: 0, finished: true, result: d.r, moves, hints: d.h || 0 };
 }
 async function exportLink() {
   const url = `${location.origin}${location.pathname}#r=${await encodeResult()}`;
@@ -1793,18 +1858,23 @@ function renderList() {
   document.getElementById('f-state').value = f.state;
   const favBtn = document.getElementById('btn-fav-only');
   favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
-  favBtn.classList.toggle('primary', f.fav);
+  favBtn.classList.toggle('on', f.fav);
+  // 作者・難易度・状態は「絞り込み」で開く。選んでいる数をボタンに出し、選んでいれば開いておく
+  const picked = [f.author, f.diff, f.state].filter(Boolean).length;
+  if (filterOpen === null) filterOpen = picked > 0;
+  document.getElementById('filter-panel').classList.toggle('hidden', !filterOpen);
+  const ft = document.getElementById('btn-filter-toggle');
+  ft.textContent = picked ? `絞り込み（${picked}）` : '絞り込み';
+  ft.classList.toggle('on', filterOpen || picked > 0);
+  ft.setAttribute('aria-expanded', String(filterOpen));
   const shown = puzzles.filter(p =>
     (!f.tag || (p.tags || []).includes(f.tag)) && (!f.diff || p.difficulty === f.diff) &&
     (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)) &&
     (!f.author || authorOf(p) === f.author) && words.every(w => textOf(p).includes(w)));
   const active = f.tag || f.diff || f.state || f.fav || f.author || words.length;
   document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
-  const count = document.getElementById('filter-count');
-  count.textContent = '';
-  if (active) {
-    count.append(`${puzzles.length}問中 ${shown.length}問を表示`);
-  }
+  document.getElementById('filter-count').classList.toggle('hidden', !active);
+  document.getElementById('filter-count-text').textContent = active ? `${puzzles.length}問中 ${shown.length}問を表示` : '';
   if (active && !shown.length) box.appendChild(el('p', 'note', f.fav && !favs.length ? 'お気に入りはまだありません。問題の ☆ を押すと登録できます。' : '条件に合う問題がありません。'));
   shown.forEach(p => {
     const c = el('div', 'card');
@@ -1821,7 +1891,7 @@ function renderList() {
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     const g = all[p.id];
-    if (g) meta.appendChild(el('span', '', g.finished ? `済（${normalizeGame(g).scores.join('対')}）` : `対戦中・${g.moves.length}手`));
+    if (g) meta.appendChild(el('span', g.finished ? 'state done' : 'state playing', g.finished ? `済（${normalizeGame(g).scores.join('対')}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
     if ((p.tags || []).length) {
       const tg = el('div', 'card-tags');
@@ -1860,6 +1930,7 @@ function renderList() {
 }
 
 const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', q: '' };
+let filterOpen = null;   // null：未操作（作者・難易度・状態を選んでいれば開いて表示）
 function loadFilter() { return { ...NO_FILTER, ...load('filter', {}) }; }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
@@ -1998,6 +2069,7 @@ document.getElementById('f-diff').onchange = e => setFilter({ diff: e.target.val
 document.getElementById('f-author').onchange = e => setFilter({ author: e.target.value });
 document.getElementById('f-q').oninput = e => setFilter({ q: e.target.value });
 document.getElementById('btn-filter-clear').onclick = clearFilter;
+document.getElementById('btn-filter-toggle').onclick = () => { filterOpen = !filterOpen; renderList(); };
 document.getElementById('f-state').onchange = e => setFilter({ state: e.target.value });
 document.getElementById('edit-puzzle-cancel').onclick = () => document.getElementById('edit-puzzle').classList.add('hidden');
 document.getElementById('edit-puzzle-ok').onclick = async () => {
@@ -2149,6 +2221,7 @@ document.getElementById('btn-ask').onclick = () => playerMove('question');
 document.getElementById('btn-answer').onclick = () => playerMove('answer');
 document.getElementById('btn-giveup').onclick = giveUp;
 document.getElementById('btn-undo').onclick = undoMove;
+document.getElementById('btn-hint').onclick = openHint;
 document.getElementById('btn-share-progress').onclick = shareProgress;
 document.getElementById('group-select').onchange = e => { save('group', e.target.value); renderList(); };
 document.getElementById('btn-group-new').onclick = () => openGroup(null);
