@@ -140,7 +140,8 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .result-title { font-size: 14px; color: var(--sub); margin-bottom: 4px; }
 .export { margin-top: 24px; }
 .badge-custom { background: var(--accent); color: var(--accent-ink); }
-.list-ops { display: flex; gap: 8px; flex-wrap: wrap; }
+.list-ops { display: flex; gap: 8px; margin: 0 0 12px; }
+.list-ops button { flex: 1; min-width: 0; padding: 7px 8px; font-size: 14px; }
 #repo-status { white-space: pre-line; }
 .coll { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .coll span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -222,7 +223,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   </header>
   <main id="view-list">
     <p class="intro">謎はすべて実話です。AIプレイヤーや友達と順番に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
-    重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。
+    重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。<br>
+    AIを使わず、誰か1人が出題者になって遊ぶこともできます（APIキー不要）。
     <button class="link" id="intro-about">くわしい遊び方</button></p>
     <div class="judge-bar" role="group" aria-label="審判">
       <span class="group-label">審判</span>
@@ -236,6 +238,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <button id="btn-group-edit">編集</button>
       <button id="btn-group-new" aria-label="グループを追加" title="グループを追加">＋</button>
     </div>
+    <div class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加</button>
+    <button id="btn-library">問題集の保存・共有</button></div>
     <div class="search-row">
       <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
       <button id="btn-filter-toggle" aria-expanded="false">絞り込み</button>
@@ -252,8 +256,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="tag-chips"><button id="btn-fav-only" class="chip">☆ お気に入り</button><span id="tag-chips"></span></div>
     <p class="filter-count" id="filter-count"><span id="filter-count-text"></span><button id="btn-filter-clear" class="link hidden">絞り込みを解除</button></p>
     <div id="puzzle-list"></div>
-    <p class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加する</button>
-    <button id="btn-library">問題集の保存・共有</button></p>
     <p class="note" id="repo-status"></p>
     <p class="version" id="version-list"></p>
   </main>
@@ -387,15 +389,16 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
     <h3>問題を増やす・友達と遊ぶ</h3>
     <ul>
-      <li>「＋ 問題を作る・追加する」で、Claude に新しい問題を作ってもらえます（Claude のアカウントが必要）</li>
+      <li>一覧の上の「＋ 問題を作る・追加」で、Claude に新しい問題を作ってもらえます（Claude のアカウントが必要）</li>
       <li>「問題集の保存・共有」で、自分の問題集を GitHub に保存し、招待リンクで友達に渡せます。友達に問題を追加してもらえば、答えを知らない問題を遊べます</li>
       <li>1問だけなら、各問題の「共有」からリンクで渡せます</li>
     </ul>
 
     <h3>必要なもの</h3>
     <ul>
-      <li>Google の Gemini APIキー（無料）。作り方は「設定」に載っています</li>
+      <li>AI が審判のとき：Google の Gemini APIキー（無料）。作り方は「設定」に載っています</li>
       <li>任意：Groq の APIキー（無料。Gemini の無料枠を使い切ったときの予備）</li>
+      <li>人が出題者のとき：キーは要りません。この端末（ブラウザ）だけで遊べます</li>
     </ul>
     <p class="note">キーや進行状況は、この端末のブラウザ内にだけ保存されます。質問の内容は Google（と、入れた場合は Groq）の AI に送られます。</p>
 
@@ -510,12 +513,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="settings" class="overlay hidden">
   <div class="modal">
     <h2>セットアップ</h2>
-    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。遊ぶには Gemini のAPIキーが1つ必要です。<br>
+    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。AIと遊ぶには Gemini のAPIキーが1つ必要です（一覧の「審判」で「人が出題者」を選べば、キーなしで遊べます）。<br>
     回数が足りないときの予備として、Groq のキーも任意で追加できます。<br>
     キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先は Google（と、入れた場合は Groq）の API だけです。</p>
 
     <section class="step">
-      <h3><span class="num">1</span>Gemini APIキー<span class="req">（必須）</span></h3>
+      <h3><span class="num">1</span>Gemini APIキー<span class="req">（AIと遊ぶときは必須）</span></h3>
       <ol>
         <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio のAPIキー画面</a>を開く（Googleアカウントでログイン）<br>
             <span class="url">https://aistudio.google.com/apikey</span></li>
@@ -593,7 +596,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.20';
+const APP_VERSION = 'v0.1.21';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1017,14 +1020,14 @@ async function openInvite(code) {
   const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
   const intro = settings.key || settings.groqKey ? '' :
     '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIや友達と順番に質問しながら解く水平思考クイズです。\n' +
-    '遊ぶには Google の Gemini APIキー（無料）が1つ要ります。作り方は次の画面で案内します。\n\n';
+    'AIと遊ぶには Google の Gemini APIキー（無料）が1つ要ります。誰か1人が出題者になって遊ぶなら、キーは要りません（一覧の「審判」で切り替え）。\n\n';
   if (!confirm(`${intro}「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
   collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
   save('collections', collections);
   repoCache[d.r] = pkgs; save('repo-cache', repoCache);
   rebuildPuzzles();
-  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (settings.key || settings.groqKey ? '' : '\n続けて、Gemini APIキーを設定してください。') + (d.w ? '\n「＋ 問題を作る・追加する」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
+  alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (settings.key || settings.groqKey || judgeMode === 'human' ? '' : '\nAIと遊ぶ場合は、「設定」で Gemini APIキーを入れてください（人が出題者になって遊ぶならキーは要りません）。') + (d.w ? '\n「＋ 問題を作る・追加」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
 }
 function removeCollection(repo) {
   collections = collections.filter(c => c.repo !== repo); save('collections', collections);
@@ -1800,7 +1803,8 @@ async function openSharedPuzzle(code) {
   const pkg = normalizePuzzle(await decodeJson(code));
   if (!confirm(`問題「${pkg.pub.title}」を追加しますか？\n（答えは答え合わせまで表示されません）`)) return false;
   await addCustomPuzzles([pkg]);
-  startPuzzle(puzzles.find(p => p.id === pkg.pub.id));
+  const p = puzzles.find(x => x.id === pkg.pub.id);
+  if (judgeMode === 'human') openHost(p); else startPuzzle(p);
   return true;
 }
 
