@@ -596,7 +596,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.21';
+const APP_VERSION = 'v0.1.22';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1996,14 +1996,23 @@ async function openHost(p) {
   const box = el('div', 'host-answer hidden');
   const sec = (t, node) => { box.appendChild(el('h2', '', t)); box.appendChild(node); };
   const list = (items, tag = 'ul') => { const l = el(tag); items.forEach(x => l.appendChild(typeof x === 'string' ? el('li', '', x) : x)); return l; };
+  // AI審判の結果画面と同じ並び（重要な事実→真相→出典）。そのあとに出題者だけが使う資料を置く
+  sec('重要な事実', list(ans.discoveries.map(d => d.fact)));
+  box.appendChild(el('p', 'note', '質問で確かめられたら、見つけた人に＋1などにします。'));
   sec('真相', el('p', '', ans.reveal.summary));
   if (ans.reveal.causal_chain.length) {
     const chain = el('div', 'chain');
     ans.reveal.causal_chain.forEach((s, i) => { if (i) chain.appendChild(el('i', '', '→')); chain.appendChild(el('span', '', s)); });
     box.appendChild(chain);
   }
+  const src = el('p');
+  const a = el('a', '', p.source.title);
+  a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener';
+  src.appendChild(a);
+  sec('出典', src);
+  box.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
+  box.appendChild(el('div', 'result-title', '出題者用の資料'));
   sec('正解の条件', el('p', '', ans.answer_criteria));
-  sec('重要な事実（質問で確かめられたら、見つけた人に＋1など）', list(ans.discoveries.map(d => d.fact)));
   sec('質問に答えるための資料', list(ans.reference_facts.map(f => {
     const li = el('li', '', f.fact);
     if (f.layer === 'reporter_claim') li.appendChild(el('span', 'claim', '（本人の申告）'));
@@ -2011,11 +2020,6 @@ async function openHost(p) {
   })));
   box.appendChild(el('p', 'note', '資料に書かれていないことを聞かれたら「分かりません」、真相に関係ない質問は「関係ありません」と答えます。'));
   if ((ans.hints || []).length) sec('ヒント（行き詰まったら、弱い順に1つずつ読み上げる）', list(ans.hints, 'ol'));
-  const src = el('p');
-  const a = el('a', '', p.source.title);
-  a.href = p.source.url; a.target = '_blank'; a.rel = 'noopener';
-  src.appendChild(a);
-  sec('出典', src);
   page.appendChild(box);
   btn.onclick = () => {
     if (box.classList.contains('hidden')) {
