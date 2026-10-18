@@ -252,6 +252,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <select id="f-state" aria-label="状態">
         <option value="">状態：すべて</option><option value="new">未プレイ</option><option value="playing">対戦中</option><option value="done">済</option>
       </select>
+      <select id="f-src" aria-label="出典"></select>
+      <select id="f-fatal" aria-label="人が亡くなった出来事">
+        <option value="">死者あり：表示する</option><option value="hide">死者あり：除く</option>
+      </select>
     </div>
     <div class="tag-chips"><button id="btn-fav-only" class="chip">☆ お気に入り</button><span id="tag-chips"></span></div>
     <p class="filter-count" id="filter-count"><span id="filter-count-text"></span><button id="btn-filter-clear" class="link hidden">絞り込みを解除</button></p>
@@ -596,7 +600,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.29';
+const APP_VERSION = 'v0.1.30';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -700,6 +704,7 @@ function normalizePuzzle(d) {
       source: { type: d.source.type || 'web', title: String(d.source.title || d.source.url), url: String(d.source.url) },
       puzzle_type: d.puzzle_type || '追加', difficulty: d.difficulty || '中級', tags,
       ...(d.author ? { author: String(d.author).trim().slice(0, 30) } : {}),
+      ...(d.fatal === true ? { fatal: true } : {}),
       question_text: String(d.question_text),
     },
     answer: {
@@ -723,7 +728,7 @@ const GEN_EXAMPLE = {
   title: '短い題名（真相を明かさない）',
   question_text: '問題文。不思議な状況だけを書き、最後に「なぜ？」などの問いで終える',
   source: { type: 'asrs', title: '出典ページの題名', url: 'https://…（実際に読んだページのURL）' },
-  puzzle_type: '意外なつながり', difficulty: '中級', tags: ['航空', 'におい'],
+  puzzle_type: '意外なつながり', difficulty: '中級', tags: ['航空', 'におい'], fatal: false,
   answer: {
     answer_criteria: '必須：(1)… (2)…。この2点が説明できていれば正解',
     discoveries: [{ id: 'd1', fact: '真相にたどり着くための重要な事実', evidence: '資料のどこに書いてあるか' }],
@@ -752,6 +757,7 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 - 問題文の最後に「（出典：資料名）」を付ける（例：（出典：NASA ASRS CALLBACK）・（出典：NTSB）・（出典：Science Museum のブログ））。号数・年月・記事の題名はヒントになるので書かない（source.title に書く）
 - ${idRule}
 - tags は題材の分野を表す日本語の短い言葉を2〜4個（例：航空・船・鉄道・医療・鉱山・戦争・道具・動物・におい）。既存の問題と同じ言葉をなるべく使う
+- fatal は、その出来事で人が亡くなっていれば true、そうでなければ false（問題文や答えに死亡を書かない場合も、資料に死者が書かれていれば true）
 - answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る
 - discoveries は真相にたどり着くための重要な事実を3〜5個
 - hints は行き詰まったときのヒントを2〜3個、弱い順に。資料の事実だけを使い、真相や answer_criteria の要素をそのまま書かない
@@ -946,6 +952,7 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 - \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
 - \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
 - \`tags\` はアプリの絞り込みに使う（任意）
+- \`fatal\` は人が亡くなった出来事なら true（アプリの一覧で「死者あり」の印が付き、絞り込みで外せる）
 - \`answer.hints\` は対戦中に全員の合意で1つずつ開くヒント（任意。弱い順に2〜3個）
 - \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。頼んだ人の名前が分かれば入れる
 - **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
@@ -1858,6 +1865,13 @@ function renderList() {
   fa.appendChild(new Option('作者：すべて', ''));
   authors.forEach(a => fa.appendChild(new Option(a, a)));
   fa.value = authors.includes(f.author) ? f.author : '';
+  const sites = [...new Set(puzzles.map(siteOf))].sort();
+  const fs = document.getElementById('f-src');
+  fs.textContent = '';
+  fs.appendChild(new Option('出典：すべて', ''));
+  sites.forEach(s => fs.appendChild(new Option(s, s)));
+  fs.value = sites.includes(f.src) ? f.src : '';
+  document.getElementById('f-fatal').value = f.fatal;
   const q = document.getElementById('f-q');
   if (document.activeElement !== q) q.value = f.q;
   const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -1868,7 +1882,7 @@ function renderList() {
   favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
   favBtn.classList.toggle('on', f.fav);
   // 作者・難易度・状態は「絞り込み」で開く。選んでいる数をボタンに出し、選んでいれば開いておく
-  const picked = [f.author, f.diff, f.state].filter(Boolean).length;
+  const picked = [f.author, f.diff, f.state, f.src, f.fatal].filter(Boolean).length;
   if (filterOpen === null) filterOpen = picked > 0;
   document.getElementById('filter-panel').classList.toggle('hidden', !filterOpen);
   const ft = document.getElementById('btn-filter-toggle');
@@ -1878,8 +1892,9 @@ function renderList() {
   const shown = puzzles.filter(p =>
     (!f.tag || (p.tags || []).includes(f.tag)) && (!f.diff || p.difficulty === f.diff) &&
     (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)) &&
-    (!f.author || authorOf(p) === f.author) && words.every(w => textOf(p).includes(w)));
-  const active = f.tag || f.diff || f.state || f.fav || f.author || words.length;
+    (!f.author || authorOf(p) === f.author) && (!f.src || siteOf(p) === f.src) && (!f.fatal || !p.fatal) &&
+    words.every(w => textOf(p).includes(w)));
+  const active = f.tag || f.diff || f.state || f.fav || f.author || f.src || f.fatal || words.length;
   document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
   document.getElementById('filter-count').classList.toggle('hidden', !active);
   document.getElementById('filter-count-text').textContent = active ? `${puzzles.length}問中 ${shown.length}問を表示` : '';
@@ -1898,6 +1913,7 @@ function renderList() {
     if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}` : '追加した問題'));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
+    if (p.fatal) meta.appendChild(el('span', 'badge', '死者あり'));
     const g = all[p.id];
     if (g) meta.appendChild(el('span', g.finished ? 'state done' : 'state playing', g.finished ? `済（${normalizeGame(g).scores.join('対')}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
@@ -2059,8 +2075,21 @@ function answerLines(p, ans, md, g) {
   ];
 }
 
-const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', q: '' };
-let filterOpen = null;   // null：未操作（作者・難易度・状態を選んでいれば開いて表示）
+const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', src: '', fatal: '', q: '' };
+let filterOpen = null;   // null：未操作（作者・難易度・状態・出典・死者ありを選んでいれば開いて表示）
+// 出典の絞り込み用：URLのホスト名からサイト名を決める
+const SITE_NAMES = [
+  [/(^|\.)asrs\.arc\.nasa\.gov$/, 'NASA ASRS'],
+  [/(^|\.)ntsb\.gov$/, 'NTSB'],
+  [/(^|\.)(sciencemuseum|scienceandindustrymuseum)\.org\.uk$/, 'Science Museum Group'],
+  [/(^|\.)iwm\.org\.uk$/, 'Imperial War Museums'],
+];
+function siteOf(p) {
+  let host = '';
+  try { host = new URL(p.source.url).hostname.replace(/^www\./, ''); } catch (e) { return 'その他'; }
+  const hit = SITE_NAMES.find(([re]) => re.test(host));
+  return hit ? hit[1] : host;
+}
 function loadFilter() { return { ...NO_FILTER, ...load('filter', {}) }; }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
@@ -2201,6 +2230,8 @@ document.getElementById('f-q').oninput = e => setFilter({ q: e.target.value });
 document.getElementById('btn-filter-clear').onclick = clearFilter;
 document.getElementById('btn-filter-toggle').onclick = () => { filterOpen = !filterOpen; renderList(); };
 document.getElementById('f-state').onchange = e => setFilter({ state: e.target.value });
+document.getElementById('f-src').onchange = e => setFilter({ src: e.target.value });
+document.getElementById('f-fatal').onchange = e => setFilter({ fatal: e.target.value });
 document.getElementById('edit-puzzle-cancel').onclick = () => document.getElementById('edit-puzzle').classList.add('hidden');
 document.getElementById('edit-puzzle-ok').onclick = async () => {
   const btn = document.getElementById('edit-puzzle-ok'), err = document.getElementById('edit-puzzle-error');
