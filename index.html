@@ -156,6 +156,13 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .search-row button.on { border-color: var(--accent); color: var(--accent); }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 8px; }
 .filters select { min-width: 0; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.ms { position: relative; min-width: 0; }
+.ms > button { width: 100%; text-align: left; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms > button.on { border-color: var(--accent); color: var(--accent); }
+.ms-panel { position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px; width: max-content; min-width: 100%; max-width: calc(100vw - 32px); max-height: 280px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.18); padding: 4px 0; }
+.ms-panel label { display: flex; gap: 8px; align-items: center; padding: 8px 12px; font-size: 15px; cursor: pointer; }
+.ms-panel label input { width: 18px; height: 18px; margin: 0; }
+.ms-panel .ms-clear { display: block; padding: 4px 12px 8px; font-size: 13px; }
 .tag-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
 #tag-chips { display: contents; }
 .filter-count { display: flex; gap: 12px; align-items: baseline; font-size: 13px; color: var(--sub); margin: 6px 0 10px; }
@@ -245,14 +252,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <button id="btn-filter-toggle" aria-expanded="false">絞り込み</button>
     </div>
     <div class="filters hidden" id="filter-panel">
-      <select id="f-author" aria-label="作者"></select>
-      <select id="f-diff" aria-label="難易度">
-        <option value="">難易度：すべて</option><option>初級</option><option>中級</option><option>上級</option>
-      </select>
-      <select id="f-state" aria-label="状態">
-        <option value="">状態：すべて</option><option value="new">未プレイ</option><option value="playing">対戦中</option><option value="done">済</option>
-      </select>
-      <select id="f-src" aria-label="出典"></select>
+      <div class="ms" id="f-author"></div>
+      <div class="ms" id="f-diff"></div>
+      <div class="ms" id="f-state"></div>
+      <div class="ms" id="f-src"></div>
       <select id="f-fatal" aria-label="人が亡くなった出来事">
         <option value="">死者あり：表示する</option><option value="hide">死者あり：除く</option>
       </select>
@@ -600,7 +603,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.30';
+const APP_VERSION = 'v0.1.31';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1853,48 +1856,41 @@ function renderList() {
   const chips = document.getElementById('tag-chips');
   chips.textContent = '';
   Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b)).forEach(t => {
-    const b = el('button', 'chip' + (f.tag === t ? ' on' : ''), `#${t}`);
-    b.onclick = () => { setFilter({ tag: f.tag === t ? '' : t }); };
+    const b = el('button', 'chip' + (f.tag.includes(t) ? ' on' : ''), `#${t}`);
+    b.onclick = () => { setFilter({ tag: f.tag.includes(t) ? f.tag.filter(x => x !== t) : [...f.tag, t] }); };
     chips.appendChild(b);
   });
   // 作者：見本と、追加した問題の作者名
   const authorOf = p => p.custom ? (p.author || '') : '見本';
   const authors = [...new Set(puzzles.map(authorOf).filter(Boolean))].sort((a, b) => a === '見本' ? -1 : b === '見本' ? 1 : a.localeCompare(b));
-  const fa = document.getElementById('f-author');
-  fa.textContent = '';
-  fa.appendChild(new Option('作者：すべて', ''));
-  authors.forEach(a => fa.appendChild(new Option(a, a)));
-  fa.value = authors.includes(f.author) ? f.author : '';
-  const sites = [...new Set(puzzles.map(siteOf))].sort();
-  const fs = document.getElementById('f-src');
-  fs.textContent = '';
-  fs.appendChild(new Option('出典：すべて', ''));
-  sites.forEach(s => fs.appendChild(new Option(s, s)));
-  fs.value = sites.includes(f.src) ? f.src : '';
+  renderMultiSelect('f-author', '作者', authors.map(a => [a, a]), f, 'author');
+  renderMultiSelect('f-diff', '難易度', ['初級', '中級', '上級'].map(d => [d, d]), f, 'diff');
+  renderMultiSelect('f-state', '状態', [['new', '未プレイ'], ['playing', '対戦中'], ['done', '済']], f, 'state');
+  renderMultiSelect('f-src', '出典', [...new Set(puzzles.map(siteOf))].sort().map(s => [s, s]), f, 'src');
   document.getElementById('f-fatal').value = f.fatal;
   const q = document.getElementById('f-q');
   if (document.activeElement !== q) q.value = f.q;
   const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
   const textOf = p => [p.title, p.question_text, ...(p.tags || []), p.source && p.source.title, authorOf(p), p.puzzle_type].join(' ').toLowerCase();
-  document.getElementById('f-diff').value = f.diff;
-  document.getElementById('f-state').value = f.state;
   const favBtn = document.getElementById('btn-fav-only');
   favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
   favBtn.classList.toggle('on', f.fav);
   // 作者・難易度・状態は「絞り込み」で開く。選んでいる数をボタンに出し、選んでいれば開いておく
-  const picked = [f.author, f.diff, f.state, f.src, f.fatal].filter(Boolean).length;
+  const picked = [f.author.length, f.diff.length, f.state.length, f.src.length, f.fatal].filter(Boolean).length;
   if (filterOpen === null) filterOpen = picked > 0;
   document.getElementById('filter-panel').classList.toggle('hidden', !filterOpen);
   const ft = document.getElementById('btn-filter-toggle');
   ft.textContent = picked ? `絞り込み（${picked}）` : '絞り込み';
   ft.classList.toggle('on', filterOpen || picked > 0);
   ft.setAttribute('aria-expanded', String(filterOpen));
+  // 同じ項目の中で複数選んだら「どれか」、項目どうしは「すべて」を満たすもの
+  const any = (sel, v) => !sel.length || sel.includes(v);
   const shown = puzzles.filter(p =>
-    (!f.tag || (p.tags || []).includes(f.tag)) && (!f.diff || p.difficulty === f.diff) &&
-    (!f.state || stateOf(p) === f.state) && (!f.fav || favs.includes(p.id)) &&
-    (!f.author || authorOf(p) === f.author) && (!f.src || siteOf(p) === f.src) && (!f.fatal || !p.fatal) &&
+    (!f.tag.length || (p.tags || []).some(t => f.tag.includes(t))) && any(f.diff, p.difficulty) &&
+    any(f.state, stateOf(p)) && (!f.fav || favs.includes(p.id)) &&
+    any(f.author, authorOf(p)) && any(f.src, siteOf(p)) && (!f.fatal || !p.fatal) &&
     words.every(w => textOf(p).includes(w)));
-  const active = f.tag || f.diff || f.state || f.fav || f.author || f.src || f.fatal || words.length;
+  const active = f.tag.length || picked || f.fav || words.length;
   document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
   document.getElementById('filter-count').classList.toggle('hidden', !active);
   document.getElementById('filter-count-text').textContent = active ? `${puzzles.length}問中 ${shown.length}問を表示` : '';
@@ -1921,7 +1917,7 @@ function renderList() {
       const tg = el('div', 'card-tags');
       p.tags.forEach(t => {
         const b = el('button', 'tag', `#${t}`);
-        b.onclick = e => { e.stopPropagation(); setFilter({ tag: t }); };
+        b.onclick = e => { e.stopPropagation(); if (!f.tag.includes(t)) setFilter({ tag: [...f.tag, t] }); };
         tg.appendChild(b);
       });
       c.appendChild(tg);
@@ -2075,8 +2071,51 @@ function answerLines(p, ans, md, g) {
   ];
 }
 
-const NO_FILTER = { tag: '', diff: '', state: '', fav: false, author: '', src: '', fatal: '', q: '' };
+const NO_FILTER = { tag: [], diff: [], state: [], fav: false, author: [], src: [], fatal: '', q: '' };
+const MULTI_KEYS = ['tag', 'diff', 'state', 'author', 'src'];
 let filterOpen = null;   // null：未操作（作者・難易度・状態・出典・死者ありを選んでいれば開いて表示）
+let msOpen = null;       // 開いている複数選択の id
+// 複数選択（ボタンを押すとチェックボックスの一覧が開く）。f[key] は選んだ値の配列
+function renderMultiSelect(id, name, opts, f, key) {
+  const box = document.getElementById(id);
+  box.textContent = '';
+  const sel = f[key].filter(v => opts.some(o => o[0] === v));
+  const btn = el('button', sel.length ? 'on' : '', `${name}：${sel.length ? opts.filter(o => sel.includes(o[0])).map(o => o[1]).join('・') : 'すべて'}`);
+  btn.type = 'button';
+  btn.setAttribute('aria-expanded', String(msOpen === id));
+  btn.onclick = e => { e.stopPropagation(); msOpen = msOpen === id ? null : id; renderList(); };
+  box.appendChild(btn);
+  if (msOpen !== id) return;
+  const panel = el('div', 'ms-panel');
+  panel.onclick = e => e.stopPropagation();
+  if (sel.length) {
+    const clear = el('button', 'link ms-clear', '選択を解除');
+    clear.type = 'button';
+    clear.onclick = () => setFilter({ [key]: [] });
+    panel.appendChild(clear);
+  }
+  opts.forEach(([v, text]) => {
+    const lb = el('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = sel.includes(v);
+    cb.onchange = () => setFilter({ [key]: cb.checked ? [...sel, v] : sel.filter(x => x !== v) });
+    lb.append(cb, document.createTextNode(text));
+    panel.appendChild(lb);
+  });
+  box.appendChild(panel);
+  // 右の列で画面からはみ出すときは右端にそろえる
+  if (panel.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { panel.style.left = 'auto'; panel.style.right = '0'; }
+}
+// 外を押したら閉じる（一覧は描き直さない）
+document.addEventListener('click', () => {
+  if (!msOpen) return;
+  const box = document.getElementById(msOpen);
+  msOpen = null;
+  if (!box) return;
+  box.querySelectorAll('.ms-panel').forEach(x => x.remove());
+  const b = box.querySelector('button');
+  if (b) b.setAttribute('aria-expanded', 'false');
+});
 // 出典の絞り込み用：URLのホスト名からサイト名を決める
 const SITE_NAMES = [
   [/(^|\.)asrs\.arc\.nasa\.gov$/, 'NASA ASRS'],
@@ -2090,7 +2129,12 @@ function siteOf(p) {
   const hit = SITE_NAMES.find(([re]) => re.test(host));
   return hit ? hit[1] : host;
 }
-function loadFilter() { return { ...NO_FILTER, ...load('filter', {}) }; }
+function loadFilter() {
+  const f = { ...NO_FILTER, ...load('filter', {}) };
+  // 1つしか選べなかった頃の保存（文字列）は配列にする
+  MULTI_KEYS.forEach(k => { if (!Array.isArray(f[k])) f[k] = f[k] ? [String(f[k])] : []; });
+  return f;
+}
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
 function renderGroupBar() {
@@ -2224,13 +2268,9 @@ document.getElementById('btn-add-puzzle').onclick = () => {
 };
 document.getElementById('btn-gen-claude').onclick = genWithClaude;
 document.getElementById('btn-fav-only').onclick = () => setFilter({ fav: !loadFilter().fav });
-document.getElementById('f-diff').onchange = e => setFilter({ diff: e.target.value });
-document.getElementById('f-author').onchange = e => setFilter({ author: e.target.value });
 document.getElementById('f-q').oninput = e => setFilter({ q: e.target.value });
 document.getElementById('btn-filter-clear').onclick = clearFilter;
 document.getElementById('btn-filter-toggle').onclick = () => { filterOpen = !filterOpen; renderList(); };
-document.getElementById('f-state').onchange = e => setFilter({ state: e.target.value });
-document.getElementById('f-src').onchange = e => setFilter({ src: e.target.value });
 document.getElementById('f-fatal').onchange = e => setFilter({ fatal: e.target.value });
 document.getElementById('edit-puzzle-cancel').onclick = () => document.getElementById('edit-puzzle').classList.add('hidden');
 document.getElementById('edit-puzzle-ok').onclick = async () => {
