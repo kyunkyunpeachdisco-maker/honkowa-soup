@@ -155,9 +155,9 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .search-row button { flex: none; padding: 6px 12px; font-size: 14px; }
 .search-row button.on { border-color: var(--accent); color: var(--accent); }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 8px; }
-.filters select { min-width: 0; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.filters select { min-width: 0; height: 44px; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .ms { position: relative; min-width: 0; }
-.ms > button { width: 100%; text-align: left; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms > button { width: 100%; height: 44px; text-align: left; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms > button.on { border-color: var(--accent); color: var(--accent); }
 .ms-panel { position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px; width: max-content; min-width: 100%; max-width: calc(100vw - 32px); max-height: 280px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.18); padding: 4px 0; }
 .ms-panel label { display: flex; gap: 8px; align-items: center; padding: 8px 12px; font-size: 15px; cursor: pointer; }
@@ -603,7 +603,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.31';
+const APP_VERSION = 'v0.1.32';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -2080,7 +2080,8 @@ function renderMultiSelect(id, name, opts, f, key) {
   const box = document.getElementById(id);
   box.textContent = '';
   const sel = f[key].filter(v => opts.some(o => o[0] === v));
-  const btn = el('button', sel.length ? 'on' : '', `${name}：${sel.length ? opts.filter(o => sel.includes(o[0])).map(o => o[1]).join('・') : 'すべて'}`);
+  const all = opts.length > 0 && sel.length === opts.length;
+  const btn = el('button', sel.length && !all ? 'on' : '', `${name}：${sel.length && !all ? opts.filter(o => sel.includes(o[0])).map(o => o[1]).join('・') : 'すべて'}`);
   btn.type = 'button';
   btn.setAttribute('aria-expanded', String(msOpen === id));
   btn.onclick = e => { e.stopPropagation(); msOpen = msOpen === id ? null : id; renderList(); };
@@ -2088,12 +2089,11 @@ function renderMultiSelect(id, name, opts, f, key) {
   if (msOpen !== id) return;
   const panel = el('div', 'ms-panel');
   panel.onclick = e => e.stopPropagation();
-  if (sel.length) {
-    const clear = el('button', 'link ms-clear', '選択を解除');
-    clear.type = 'button';
-    clear.onclick = () => setFilter({ [key]: [] });
-    panel.appendChild(clear);
-  }
+  // 全部入っていれば全部外す、そうでなければ全部入れる（全部入れてから要らないものを外す使い方用）
+  const toggle = el('button', 'link ms-clear', '全チェック/全解除');
+  toggle.type = 'button';
+  toggle.onclick = () => setFilter({ [key]: all ? [] : opts.map(o => o[0]) });
+  panel.appendChild(toggle);
   opts.forEach(([v, text]) => {
     const lb = el('label');
     const cb = document.createElement('input');
