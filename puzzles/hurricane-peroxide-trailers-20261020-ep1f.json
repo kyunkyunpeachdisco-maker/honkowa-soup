@@ -1,0 +1,19 @@
+{
+  "id": "hurricane-peroxide-trailers-20261020-ep1f",
+  "title": "水が引くのを待てなかった火",
+  "status": "verified",
+  "source": {
+    "type": "csb",
+    "title": "CSB: Extreme Weather, Extreme Consequences — Investigation of the Arkema Crosby Facility and Hurricane Harvey (Executive Summary)",
+    "url": "https://www.csb.gov/assets/1/20/CSB_Arkema_Exec_Summary_08.pdf"
+  },
+  "puzzle_type": "意外な原因",
+  "difficulty": "中級",
+  "tags": [
+    "化学",
+    "洪水",
+    "火事"
+  ],
+  "fatal": false,
+  "question_text": "ハリケーンの洪水で従業員が避難した化学工場で、製品を積んだトレーラーが次々に燃えだした。最後は当局が、残りのトレーラーに自分たちで火をつけた。トレーラーはなぜ燃えだし、当局はなぜわざと燃やしたのか？（出典：CSB）"
+}

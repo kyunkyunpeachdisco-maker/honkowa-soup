@@ -1,0 +1,19 @@
+{
+  "id": "meat-bone-meal-warehouse-fire-20261020-9o7n",
+  "title": "冬の倉庫の煙",
+  "status": "verified",
+  "source": {
+    "type": "shippai",
+    "title": "失敗知識データベース：貯蔵中の肉骨粉が雨水により発酵し自然発火",
+    "url": "https://www.shippai.org/fkd/cf/CC0200015.html"
+  },
+  "puzzle_type": "意外な原因",
+  "difficulty": "中級",
+  "tags": [
+    "火事",
+    "動物",
+    "食べ物"
+  ],
+  "fatal": false,
+  "question_text": "2001年12月の早朝、鹿児島市の倉庫で火事が見つかった。倉庫には、ある粉が約1000トン、袋に詰めて積まれていたが、燃えていたのはその一部だけだった。数日前には雨が降っていた。この粉は何で、なぜ燃え、なぜこれほど大量に置かれていたのか？（出典：失敗知識データベース）"
+}

@@ -609,7 +609,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.38';
+const APP_VERSION = 'v0.1.39';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -777,6 +777,7 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 - 資料に書かれていない事実を足さない。推測で補わない
 - 事故や事件で亡くなった人・けがをした人など、被害にあった人の実名は問題文・答え・資料のどこにも書かない（「乗客」「操縦士」のように立場で書く。名前は出典を見れば分かる）
 - 問題文には真相の手がかりになる不思議な状況だけを書き、真相そのものは書かない
+- 問題文は100字前後、長くても150字（出典の部分を除く）。細かい事実（日時・場所・数値・経緯）は問題文に詰め込まず reference_facts に入れ、質問で引き出してもらう
 - 問題文の最後に「（出典：資料名）」を付ける（例：（出典：NASA ASRS CALLBACK）・（出典：NTSB）・（出典：Science Museum のブログ）・（出典：MAIB）・（出典：失敗知識データベース））。号数・年月・記事の題名はヒントになるので書かない（source.title に書く）
 - source.type は出典に合わせて asrs・ntsb・museum・maib・raib・csb・shippai のどれか（museum は Science Museum Group と Imperial War Museums）
 - ${idRule}

@@ -1,0 +1,19 @@
+{
+  "id": "crab-catch-flooding-20261020-3un4",
+  "title": "穴の見つからない浸水",
+  "status": "verified",
+  "source": {
+    "type": "maib",
+    "title": "MAIB Safety Digest 1/2018, Case 21: Lotto Crabs",
+    "url": "https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/876760/2018-SD1-MAIBSafetyDigest.pdf"
+  },
+  "puzzle_type": "意外な原因",
+  "difficulty": "中級",
+  "tags": [
+    "船",
+    "漁",
+    "水"
+  ],
+  "fatal": false,
+  "question_text": "漁を終えて全速力で港へ帰る小さな漁船の機関室に、水がたまった。漁船は救命艇に助けられたが、港で調べても、翌日ダイバーが潜って船体を調べても、水の入った場所は見つからなかった。水はどこから、なぜ入ったのか？（出典：MAIB）"
+}
