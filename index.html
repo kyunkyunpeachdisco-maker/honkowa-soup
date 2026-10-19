@@ -603,7 +603,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.32';
+const APP_VERSION = 'v0.1.33';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1906,7 +1906,7 @@ function renderList() {
     c.appendChild(head);
     const meta = el('div', 'meta');
     if (p.custom && p.author) meta.appendChild(el('span', '', `作：${p.author}`));
-    if (p.custom) meta.appendChild(el('span', 'badge badge-custom', p.collection ? `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}` : '追加した問題'));
+    if (p.collection) meta.appendChild(el('span', 'badge badge-custom', `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}`));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     if (p.fatal) meta.appendChild(el('span', 'badge', '死者あり'));
