@@ -373,6 +373,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <li><b>NTSB</b>：アメリカ国家運輸安全委員会の事故調査。飛行機・船・鉄道・バスなどの事故の原因を調べた報告（<a href="https://www.ntsb.gov/investigations/" target="_blank" rel="noopener">サイト</a>）</li>
       <li><b>Science Museum Group のブログ</b>：ロンドンの科学博物館（Science Museum）とマンチェスターの科学産業博物館（Science and Industry Museum）の、収蔵品や調査についての記事（<a href="https://blog.sciencemuseum.org.uk/" target="_blank" rel="noopener">Science Museum</a>・<a href="https://blog.scienceandindustrymuseum.org.uk/" target="_blank" rel="noopener">Science and Industry Museum</a>）</li>
       <li><b>Imperial War Museums</b>：イギリスの帝国戦争博物館の解説記事（<a href="https://www.iwm.org.uk/history" target="_blank" rel="noopener">サイト</a>）</li>
+      <li><b>MAIB</b>：イギリス海難調査局の調査報告と、短い事例を集めた Safety Digest。商船・漁船・プレジャーボートの事故（<a href="https://www.gov.uk/maib-reports" target="_blank" rel="noopener">サイト</a>）</li>
+      <li><b>RAIB</b>：イギリス鉄道事故調査局の調査報告と Safety digest（<a href="https://www.gov.uk/raib-reports" target="_blank" rel="noopener">サイト</a>）</li>
+      <li><b>CSB</b>：アメリカ化学安全委員会の、工場などの化学事故の調査（<a href="https://www.csb.gov/investigations/" target="_blank" rel="noopener">サイト</a>）</li>
+      <li><b>失敗知識データベース</b>：科学技術振興機構（JST）が作った、日本や海外の事故・失敗の事例集（<a href="https://www.shippai.org/fkd/" target="_blank" rel="noopener">サイト</a>）</li>
     </ul>
     <p class="note">ASRS の報告は、体験した本人の申告です。審判は「資料にそう書かれている」ことを根拠に答えます。</p>
 
@@ -605,7 +609,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.34';
+const APP_VERSION = 'v0.1.35';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -734,7 +738,13 @@ const GEN_SOURCES = [
   { name: 'NTSB（米国家運輸安全委員会）の事故調査', url: 'https://www.ntsb.gov/investigations/' },
   { name: 'Science Museum Group のブログ（ロンドン Science Museum／マンチェスター Science and Industry Museum）', url: 'https://blog.sciencemuseum.org.uk/ と https://blog.scienceandindustrymuseum.org.uk/' },
   { name: 'Imperial War Museums（帝国戦争博物館）の解説記事', url: 'https://www.iwm.org.uk/history' },
+  { name: 'MAIB（英国海難調査局）の調査報告と事例集 Safety Digest', url: 'https://www.gov.uk/maib-reports' },
+  { name: 'RAIB（英国鉄道事故調査局）の調査報告と Safety digest', url: 'https://www.gov.uk/raib-reports' },
+  { name: 'CSB（米国化学安全委員会）の事故調査', url: 'https://www.csb.gov/investigations/' },
+  { name: '失敗知識データベース（科学技術振興機構が作った、日本や海外の事故・失敗の事例集）', url: 'https://www.shippai.org/fkd/' },
 ];
+// source.type → 出典の絞り込みでの名前（MAIB と RAIB はどちらも gov.uk なので、URL では見分けられない）
+const SOURCE_TYPE_NAMES = { maib: 'MAIB', raib: 'RAIB', csb: 'CSB', shippai: '失敗知識データベース' };
 const GEN_EXAMPLE = {
   id: 'english-topic-name',
   title: '短い題名（真相を明かさない）',
@@ -760,13 +770,15 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 ## 題材の条件
 - 状況は不思議だが、真相を聞くと「なるほど」と納得できる出来事（意外な原因・意外な使い道・意外なつながり）
 - ネットや雑学でよく知られた話は避ける（AIが知識だけで即答できてしまうため）
+- 飛行機の問題が多いので、なるべく飛行機以外の分野（船・鉄道・工場・博物館の収蔵品など）から選ぶ
 - ${avoid}
 
 ## 作り方のルール
 - 資料に書かれていない事実を足さない。推測で補わない
 - 事故や事件で亡くなった人・けがをした人など、被害にあった人の実名は問題文・答え・資料のどこにも書かない（「乗客」「操縦士」のように立場で書く。名前は出典を見れば分かる）
 - 問題文には真相の手がかりになる不思議な状況だけを書き、真相そのものは書かない
-- 問題文の最後に「（出典：資料名）」を付ける（例：（出典：NASA ASRS CALLBACK）・（出典：NTSB）・（出典：Science Museum のブログ））。号数・年月・記事の題名はヒントになるので書かない（source.title に書く）
+- 問題文の最後に「（出典：資料名）」を付ける（例：（出典：NASA ASRS CALLBACK）・（出典：NTSB）・（出典：Science Museum のブログ）・（出典：MAIB）・（出典：失敗知識データベース））。号数・年月・記事の題名はヒントになるので書かない（source.title に書く）
+- source.type は出典に合わせて asrs・ntsb・museum・maib・raib・csb・shippai のどれか（museum は Science Museum Group と Imperial War Museums）
 - ${idRule}
 - tags は題材の分野を表す日本語の短い言葉を2〜4個（例：航空・船・鉄道・医療・鉱山・戦争・道具・動物・におい）。既存の問題と同じ言葉をなるべく使う
 - fatal は、その出来事で人が亡くなっていれば true、そうでなければ false（問題文や答えに死亡を書かない場合も、資料に死者が書かれていれば true）
@@ -2160,8 +2172,11 @@ const SITE_NAMES = [
   [/(^|\.)ntsb\.gov$/, 'NTSB'],
   [/(^|\.)(sciencemuseum|scienceandindustrymuseum)\.org\.uk$/, 'Science Museum Group'],
   [/(^|\.)iwm\.org\.uk$/, 'Imperial War Museums'],
+  [/(^|\.)csb\.gov$/, 'CSB'],
+  [/(^|\.)shippai\.org$/, '失敗知識データベース'],
 ];
 function siteOf(p) {
+  if (SOURCE_TYPE_NAMES[p.source && p.source.type]) return SOURCE_TYPE_NAMES[p.source.type];
   let host = '';
   try { host = new URL(p.source.url).hostname.replace(/^www\./, ''); } catch (e) { return 'その他'; }
   const hit = SITE_NAMES.find(([re]) => re.test(host));
