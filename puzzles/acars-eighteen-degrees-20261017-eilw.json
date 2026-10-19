@@ -1,0 +1,18 @@
+{
+  "id": "acars-eighteen-degrees-20261017-eilw",
+  "status": "verified",
+  "source": {
+    "type": "asrs",
+    "title": "ASRS CALLBACK Issue 213 - March 1997, Winter's Lingering Touch（Degrees of Default）",
+    "url": "https://asrs.arc.nasa.gov/publications/callback/cb_213.htm"
+  },
+  "puzzle_type": "意外な原因",
+  "difficulty": "中級",
+  "tags": [
+    "航空",
+    "数字",
+    "計算"
+  ],
+  "title": "「18」と入れただけ",
+  "question_text": "標高2,500フィートの空港で、重量の制限を受けていた旅客機。副操縦士は機内の通信端末（ACARS）に空港の気温を入れて、許容される離陸重量を出し直した。入れた数字は、空港の気温どおりの「18」だった。ところがこの旅客機は、知らないうちに700〜1,000ポンド重量オーバーのまま離陸していた。なぜか？（出典：NASA ASRS CALLBACK）"
+}
