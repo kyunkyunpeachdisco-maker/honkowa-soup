@@ -310,7 +310,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <h3><span class="num">2</span>できた問題を貼り付ける</h3>
     <p class="note">Claude が返した問題データ（JSON）をそのまま貼り付けて「追加」を押してください。追加した問題はこの端末（データリポジトリを設定していればリポジトリ）に保存され、一覧の「共有」から1問ずつ友達にリンクで渡せます。</p>
     <label>作者名（一覧に出ます。任意）
-    <input type="text" id="add-author" placeholder="例: たろう"></label>
+    <input type="text" id="add-author" placeholder="空欄なら、データリポジトリに設定した名前"></label>
     <label id="add-dest-wrap" class="hidden">保存先
     <select id="add-dest"></select></label>
     <textarea id="add-puzzle-text" rows="10" placeholder='{"title": "…", "question_text": "…", "source": {...}, "answer": {...}}'></textarea>
@@ -463,6 +463,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <input type="password" id="lib-pat" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
       <label>リポジトリ（手順1の名前のまま作ったなら空欄で大丈夫です）
       <input type="text" id="lib-repo" placeholder="空欄なら「あなたのユーザー名/honkowa-soup-data」" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label>あなたの名前（任意。この問題集の問題の作者として一覧に出ます。友達にも見えます）
+      <input type="text" id="lib-name" placeholder="例: たろう" maxlength="30"></label>
       <p class="note">別の名前で作った・既存のリポジトリを使う場合は、そのリポジトリのページのURLを貼ってください。</p>
       <p class="note">初回の保存時に、リポジトリへ案内ファイル（CLAUDE.md）を自動で作成します（既に CLAUDE.md があれば作りません）。claude.ai/code でこのリポジトリを開いて「問題を作って」と頼むと、Claude が案内ファイルに沿って問題を作り、リポジトリに追加します。Claude が作業用ブランチに保存した場合は、作られたプルリクエストを GitHub でマージ（Merge）すると、次にアプリを開いたときに出ます。<br>
       複数の端末で使うときは、各端末で同じリポジトリとトークンを入れてください。トークンはこの端末のブラウザ内にのみ保存され、送信先は GitHub の API だけです。</p>
@@ -603,7 +605,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.33';
+const APP_VERSION = 'v0.1.34';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -648,6 +650,12 @@ let repoCache = load('repo-cache', {});       // { 'owner/repo': [pkg, …] }
 let pkgIndex = {};                            // id → { pkg, from: 'local' | 'mine' | collection }
 let myAdditions = load('my-additions', []);   // 書き込める友達の問題集に、この端末から追加した問題（[{ repo, id }]。削除できるのはこれだけ）
 function addedByMe(repo, id) { return myAdditions.some(a => a.repo === repo && a.id === id); }
+// リポジトリ直下の profile.json の名前。作者名の無い問題は、この名前を作者として出す
+let repoNames = load('repo-names', {});       // 'owner/repo' → 名前
+function repoNameOf(from) {
+  const repo = from === 'mine' ? myRepo.repo : typeof from === 'object' ? from.repo : '';
+  return repo ? (repoNames[repo] || '') : '';
+}
 
 function rebuildPuzzles() {
   pkgIndex = {};
@@ -660,6 +668,7 @@ function rebuildPuzzles() {
   collections.forEach(c => (repoCache[c.repo] || []).forEach(p => add(p, c)));
   puzzles = [...bundled, ...Object.values(pkgIndex).map(({ pkg, from }) => ({
     ...pkg.pub, custom: true, collection: typeof from === 'object' ? from.name : '',
+    authorName: pkg.pub.author || repoNameOf(from),
     byMe: typeof from === 'object' && addedByMe(from.repo, pkg.pub.id),
   }))];
 }
@@ -870,11 +879,13 @@ function normalizeRepoSlug(input) {
 // puzzles/ を読む。sha はファイル単位の GET ではなく一覧から取る（1MB 超で GET が 403 になるため）
 let shaCache = {};   // 'owner/repo' → { id: sha }
 async function fetchRepoPuzzles(repo, token) {
+  const nameDone = fetchRepoName(repo, token);
   const res = await fetch(ghUrl(repo, 'puzzles'), { headers: ghHeaders(token), cache: 'no-store' });
   if (res.status === 404) {
     // フォルダがまだ無いのか、リポジトリが見えないのかを見分ける
     const r2 = await fetch(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(token) });
     if (!r2.ok) throw new Error(ghErrorText(r2.status));
+    await nameDone;
     return { pkgs: [], shas: {} };
   }
   if (!res.ok) throw new Error(ghErrorText(res.status));
@@ -888,7 +899,30 @@ async function fetchRepoPuzzles(repo, token) {
     try { const pkg = normalizePuzzle(JSON.parse(await r.text())); pkg.pub.id = id; pkgs.push(pkg); } catch (e) { /* 壊れたファイルは飛ばす */ }
   }));
   pkgs.sort((a, b) => a.pub.id.localeCompare(b.pub.id));
+  await nameDone;
   return { pkgs, shas };
+}
+// profile.json（{"name": "…"}）を読む。無ければ名前なし。読めないときは控えのまま
+async function fetchRepoName(repo, token) {
+  try {
+    const r = await fetch(ghUrl(repo, 'profile.json'), { headers: ghHeaders(token, true), cache: 'no-store' });
+    if (r.status === 404) delete repoNames[repo];
+    else if (r.ok) repoNames[repo] = String(JSON.parse(await r.text()).name || '').trim().slice(0, 30);
+    else return;
+    save('repo-names', repoNames);
+  } catch (e) { /* 名前が読めなくても問題は遊べる */ }
+}
+async function ghPutRepoName(name) {
+  const repo = myRepo.repo, token = myRepo.pat;
+  const cur = await fetch(ghUrl(repo, 'profile.json'), { headers: ghHeaders(token), cache: 'no-store' });
+  if (!cur.ok && cur.status !== 404) throw new Error(ghErrorText(cur.status));
+  const sha = cur.ok ? (await cur.json()).sha : null;
+  const res = await fetch(ghUrl(repo, 'profile.json'), {
+    method: 'PUT', headers: ghHeaders(token),
+    body: JSON.stringify({ message: `名前を設定：${name}`, content: b64utf8(JSON.stringify({ name }, null, 2) + '\n'), ...(sha ? { sha } : {}) }),
+  });
+  if (!res.ok) throw new Error(ghErrorText(res.status));
+  repoNames[repo] = name; save('repo-names', repoNames);
 }
 // repo・token を省くと自分のデータリポジトリ。書き込める招待リンクを受け取った友達の問題集にも使う。
 // sha なし＝新規作成：同じ名前のファイルが既にあれば、上書きせず id を付け直して作る。
@@ -947,6 +981,7 @@ function guideFileText() {
 - デフォルトブランチの \`puzzles/<id>.json\`（1問1ファイル。ファイル名が問題の id）
 - アプリは起動のたびにこのフォルダを読み込みます。ここに置いた問題はアプリの一覧に出ます
 - アプリの招待リンクを受け取った友達も、読み取り専用で同じ問題を遊びます
+- \`profile.json\`（\`{"name": "…"}\`）は持ち主の名前。アプリの「問題集の保存・共有」で設定する
 
 ## 問題の形式
 \`\`\`json
@@ -957,7 +992,7 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 - \`tags\` はアプリの絞り込みに使う（任意）
 - \`fatal\` は人が亡くなった出来事なら true（アプリの一覧で「死者あり」の印が付き、絞り込みで外せる）
 - \`answer.hints\` は対戦中に全員の合意で1つずつ開くヒント（任意。弱い順に2〜3個）
-- \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。頼んだ人の名前が分かれば入れる
+- \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。ふつうは入れない（空なら、リポジトリ直下の \`profile.json\` の \`name\` が作者として出る）。この問題集の持ち主以外の人の問題のときだけ、その人の名前を入れる
 - **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
 
 ## 問題を作るように頼まれたら
@@ -1763,7 +1798,9 @@ async function decodeJson(code) {
 }
 // 問題の共有リンク（答えも入るが、受け取った側の画面には答え合わせまで出さない）
 async function puzzleShareUrl(id) {
-  return `${location.origin}${location.pathname}#p=${await encodeJson(pkgFlat(pkgIndex[id].pkg))}`;
+  // 作者名の無い問題は、問題集の名前を作者として付けて渡す
+  const { pkg, from } = pkgIndex[id], author = pkg.pub.author || repoNameOf(from);
+  return `${location.origin}${location.pathname}#p=${await encodeJson({ ...pkgFlat(pkg), ...(author ? { author } : {}) })}`;
 }
 async function sharePuzzle(id) {
   const c = pkgIndex[id].pkg;
@@ -1860,9 +1897,9 @@ function renderList() {
     b.onclick = () => { setFilter({ tag: f.tag.includes(t) ? f.tag.filter(x => x !== t) : [...f.tag, t] }); };
     chips.appendChild(b);
   });
-  // 作者：見本と、追加した問題の作者名
-  const authorOf = p => p.custom ? (p.author || '') : '見本';
-  const authors = [...new Set(puzzles.map(authorOf).filter(Boolean))].sort((a, b) => a === '見本' ? -1 : b === '見本' ? 1 : a.localeCompare(b));
+  // 作者：サンプル問題と、追加した問題の作者名
+  const authorOf = p => p.custom ? (p.authorName || '') : SAMPLE_AUTHOR;
+  const authors = [...new Set(puzzles.map(authorOf).filter(Boolean))].sort((a, b) => a === SAMPLE_AUTHOR ? -1 : b === SAMPLE_AUTHOR ? 1 : a.localeCompare(b));
   renderMultiSelect('f-author', '作者', authors.map(a => [a, a]), f, 'author');
   renderMultiSelect('f-diff', '難易度', ['初級', '中級', '上級'].map(d => [d, d]), f, 'diff');
   renderMultiSelect('f-state', '状態', [['new', '未プレイ'], ['playing', '対戦中'], ['done', '済']], f, 'state');
@@ -1905,7 +1942,8 @@ function renderList() {
     head.appendChild(star);
     c.appendChild(head);
     const meta = el('div', 'meta');
-    if (p.custom && p.author) meta.appendChild(el('span', '', `作：${p.author}`));
+    if (!p.custom) meta.appendChild(el('span', '', SAMPLE_AUTHOR));
+    else if (p.authorName) meta.appendChild(el('span', '', `作：${p.authorName}`));
     if (p.collection) meta.appendChild(el('span', 'badge badge-custom', `${p.collection}の問題集${p.byMe ? '（あなたが追加）' : ''}`));
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
@@ -2129,10 +2167,12 @@ function siteOf(p) {
   const hit = SITE_NAMES.find(([re]) => re.test(host));
   return hit ? hit[1] : host;
 }
+const SAMPLE_AUTHOR = 'サンプル問題';
 function loadFilter() {
   const f = { ...NO_FILTER, ...load('filter', {}) };
   // 1つしか選べなかった頃の保存（文字列）は配列にする
   MULTI_KEYS.forEach(k => { if (!Array.isArray(f[k])) f[k] = f[k] ? [String(f[k])] : []; });
+  f.author = f.author.map(a => a === '見本' ? SAMPLE_AUTHOR : a);   // 旧表記
   return f;
 }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
@@ -2261,7 +2301,7 @@ document.getElementById('btn-add-puzzle').onclick = () => {
   dest.value = load('add-dest', '');
   if (dest.selectedIndex < 0) dest.value = '';
   document.getElementById('add-dest-wrap').classList.toggle('hidden', !writable.length);
-  document.getElementById('add-author').value = load('author-name', '');
+  document.getElementById('add-author').value = '';
   document.getElementById('add-puzzle-text').value = '';
   document.getElementById('add-puzzle-error').textContent = '';
   document.getElementById('add-puzzle').classList.remove('hidden');
@@ -2290,11 +2330,11 @@ document.getElementById('add-puzzle-ok').onclick = async () => {
   const btn = document.getElementById('add-puzzle-ok');
   try {
     const pkgs = parsePuzzlesText(document.getElementById('add-puzzle-text').value);
-    const author = document.getElementById('add-author').value.trim().slice(0, 30);
-    save('author-name', author);
+    const destRepo = document.getElementById('add-dest').value;
+    // 空欄なら：自分の問題集は profile.json の名前が出るので付けない。友達の問題集には自分の名前を付ける
+    const author = document.getElementById('add-author').value.trim().slice(0, 30) || (destRepo ? repoNameOf('mine') : '');
     if (author) pkgs.forEach(p => { if (!p.pub.author) p.pub.author = author; });
     btn.disabled = true;
-    const destRepo = document.getElementById('add-dest').value;
     save('add-dest', destRepo);
     const msg = await addCustomPuzzles(pkgs, collections.find(c => c.repo === destRepo && c.writable));
     document.getElementById('add-puzzle').classList.add('hidden');
@@ -2322,10 +2362,12 @@ function renderCollections() {
     box.appendChild(row);
   });
 }
+let libNameShown = '';
 function openLibrary() {
   document.getElementById('lib-repo').value = myRepo.repo;
   document.getElementById('lib-pat').value = myRepo.pat;
-  document.getElementById('inv-name').value = load('invite-name', '') || (myRepo.repo.split('/')[0] || '');
+  document.getElementById('lib-name').value = libNameShown = repoNameOf('mine');
+  document.getElementById('inv-name').value = load('invite-name', '') || repoNameOf('mine') || (myRepo.repo.split('/')[0] || '');
   document.getElementById('inv-token').value = '';
   renderInviteKind();
   ['lib-error', 'inv-error'].forEach(id => document.getElementById(id).textContent = '');
@@ -2356,6 +2398,10 @@ document.getElementById('lib-save').onclick = async () => {
     save('data-repo', repo); save('github-pat', pat); save('repo-cache', repoCache);
     collections = collections.filter(c => c.repo !== repo); save('collections', collections);
     const note = await uploadLocal();
+    const name = document.getElementById('lib-name').value.trim().slice(0, 30);
+    // 書き換えたときだけ保存する（別の端末で初めて設定するとき、空欄でリポジトリの名前を消さないため）
+    if (name !== libNameShown && name !== repoNameOf('mine')) await ghPutRepoName(name);
+    document.getElementById('lib-name').value = repoNameOf('mine');
     rebuildPuzzles();
     repoStatus = '';
     renderList();
