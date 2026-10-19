@@ -609,7 +609,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.35';
+const APP_VERSION = 'v0.1.36';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -770,7 +770,7 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 ## 題材の条件
 - 状況は不思議だが、真相を聞くと「なるほど」と納得できる出来事（意外な原因・意外な使い道・意外なつながり）
 - ネットや雑学でよく知られた話は避ける（AIが知識だけで即答できてしまうため）
-- 飛行機の問題が多いので、なるべく飛行機以外の分野（船・鉄道・工場・博物館の収蔵品など）から選ぶ
+- 既存の問題を見て、同じ分野に偏らないように選ぶ
 - ${avoid}
 
 ## 作り方のルール
