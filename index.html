@@ -257,7 +257,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <div class="ms" id="f-state"></div>
       <div class="ms" id="f-src"></div>
       <select id="f-fatal" aria-label="人が亡くなった出来事">
-        <option value="">死者あり：表示する</option><option value="hide">死者あり：除く</option>
+        <option value="">死者あり：除く</option><option value="show">死者あり：表示する</option>
       </select>
     </div>
     <div class="tag-chips"><button id="btn-fav-only" class="chip">☆ お気に入り</button><span id="tag-chips"></span></div>
@@ -609,7 +609,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.40';
+const APP_VERSION = 'v0.1.41';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1003,7 +1003,7 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 - \`answer\` は答え合わせまでプレイヤーに見せない部分（審判AIが判定に使う）
 - \`question_text\`・\`answer.answer_criteria\`・\`answer.discoveries\`・\`answer.reference_facts\`・\`answer.reveal.summary\`・\`source.url\` は必須
 - \`tags\` はアプリの絞り込みに使う（任意）
-- \`fatal\` は人が亡くなった出来事なら true（アプリの一覧で「死者あり」の印が付き、絞り込みで外せる）
+- \`fatal\` は人が亡くなった出来事なら true（アプリの一覧では初めは出さず、絞り込みで表示すると「死者あり」の印付きで出る）
 - \`answer.hints\` は対戦中に全員の合意で1つずつ開くヒント（任意。弱い順に2〜3個）
 - \`author\` は作者名（任意。アプリの一覧と作者での絞り込みに出る）。ふつうは入れない（空なら、リポジトリ直下の \`profile.json\` の \`name\` が作者として出る）。この問題集の持ち主以外の人の問題のときだけ、その人の名前を入れる
 - **id（＝ファイル名）は「題材を表す英小文字-日付8桁-ランダムな英小文字・数字4文字」**（例：\`canary-resuscitator-20261012-k3x9\`）。アプリや他の端末で作った問題と重ならないようにするため。既存のファイル名と同じにしない
@@ -1926,7 +1926,7 @@ function renderList() {
   favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
   favBtn.classList.toggle('on', f.fav);
   // 作者・難易度・状態は「絞り込み」で開く。選んでいる数をボタンに出し、選んでいれば開いておく
-  const picked = [f.author.length, f.diff.length, f.state.length, f.src.length, f.fatal].filter(Boolean).length;
+  const picked = [f.author.length, f.diff.length, f.state.length, f.src.length, f.fatal === 'show'].filter(Boolean).length;
   if (filterOpen === null) filterOpen = picked > 0;
   document.getElementById('filter-panel').classList.toggle('hidden', !filterOpen);
   const ft = document.getElementById('btn-filter-toggle');
@@ -1938,7 +1938,7 @@ function renderList() {
   const shown = puzzles.filter(p =>
     (!f.tag.length || (p.tags || []).some(t => f.tag.includes(t))) && any(f.diff, p.difficulty) &&
     any(f.state, stateOf(p)) && (!f.fav || favs.includes(p.id)) &&
-    any(f.author, authorOf(p)) && any(f.src, siteOf(p)) && (!f.fatal || !p.fatal) &&
+    any(f.author, authorOf(p)) && any(f.src, siteOf(p)) && (f.fatal === 'show' || !p.fatal) &&
     words.every(w => textOf(p).includes(w)));
   const active = f.tag.length || picked || f.fav || words.length;
   document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
@@ -2189,6 +2189,8 @@ function loadFilter() {
   // 1つしか選べなかった頃の保存（文字列）は配列にする
   MULTI_KEYS.forEach(k => { if (!Array.isArray(f[k])) f[k] = f[k] ? [String(f[k])] : []; });
   f.author = f.author.map(a => a === '見本' ? SAMPLE_AUTHOR : a);   // 旧表記
+  // 死者ありは初めは除く（'show' のときだけ出す）。表示が初期値だった頃の保存は除くに戻す
+  if (f.fatal !== 'show') f.fatal = '';
   return f;
 }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
