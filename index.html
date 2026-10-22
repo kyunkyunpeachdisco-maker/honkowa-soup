@@ -89,6 +89,12 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .judge-bar button { flex: 1; padding: 6px 10px; font-size: 14px; }
 .judge-bar button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #judge-human-note { margin: -4px 0 10px; font-size: 13px; color: var(--sub); }
+/* 問題文の右上の小さなコピーボタン */
+.qwrap { position: relative; }
+.qwrap > .question, .qwrap > .host-question { padding-right: 36px; }
+.copy-icon { position: absolute; top: 2px; right: 2px; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 8px; color: var(--sub); cursor: pointer; }
+.copy-icon:hover { background: var(--chip); color: var(--ink); }
+.copy-icon.done { color: var(--good); }
 .host-question { font-size: 17px; white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .host-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
 .host-answer { border-top: 2px dashed var(--line); margin-top: 8px; padding-top: 4px; }
@@ -269,7 +275,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   <div id="view-game" class="hidden" style="flex:1; min-height:0;">
     <div id="game">
       <div class="board">
-        <p class="question" id="q-text"></p>
+        <div class="qwrap" id="q-wrap"><p class="question" id="q-text"></p></div>
         <ol class="hints hidden" id="hint-list"></ol>
         <div class="scores">
           <span id="score-list"></span>
@@ -609,7 +615,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.41';
+const APP_VERSION = 'v0.1.42';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1664,7 +1670,7 @@ function showReveal(shared) {
   v.appendChild(el('p', 'note', rs.sub));
 
   v.appendChild(el('h2', '', '問題'));
-  v.appendChild(el('p', 'question', game.puzzle.question_text));
+  v.appendChild(questionBlock('question', game.puzzle.question_text));
 
   appendAnswer(v, game.puzzle, answerData, game);
 
@@ -1726,6 +1732,28 @@ function resultText(md) {
   ];
   return lines.join('\n');
 }
+
+// 問題文の右上に置く小さなコピーボタン（画像に保存するときは写さない）
+const COPY_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+const DONE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+function copyIconButton(getText) {
+  const b = el('button', 'copy-icon');
+  b.type = 'button'; b.title = '問題文をコピー'; b.setAttribute('aria-label', '問題文をコピー');
+  b.setAttribute('data-html2canvas-ignore', '');
+  b.innerHTML = COPY_SVG;
+  b.onclick = async () => {
+    if (!await copyText(getText())) { alert('コピーできませんでした。'); return; }
+    b.innerHTML = DONE_SVG; b.classList.add('done');
+    setTimeout(() => { b.innerHTML = COPY_SVG; b.classList.remove('done'); }, 1500);
+  };
+  return b;
+}
+function questionBlock(cls, text) {
+  const w = el('div', 'qwrap');
+  w.append(el('p', cls, text), copyIconButton(() => text));
+  return w;
+}
+document.getElementById('q-wrap').appendChild(copyIconButton(() => document.getElementById('q-text').textContent));
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; }
@@ -2019,7 +2047,7 @@ async function openHost(p) {
   page.appendChild(card);
   card.appendChild(el('div', 'result-title', `本当にあった怖いスープ「${p.title}」・${p.difficulty}`));
   card.appendChild(el('h2', '', '問題'));
-  card.appendChild(el('p', 'host-question', p.question_text));
+  card.appendChild(questionBlock('host-question', p.question_text));
   const how = el('p', 'note', '出題者が読み上げるか、この画面をみんなに見せてください。みんなは「はい／いいえ」で答えられる質問をします。');
   const acts = el('div', 'host-actions');
   const btn = el('button', 'primary', '出題者用：答えを見る');
