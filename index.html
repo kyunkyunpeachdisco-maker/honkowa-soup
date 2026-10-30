@@ -654,7 +654,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.46';
+const APP_VERSION = 'v0.1.47';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1397,8 +1397,15 @@ async function rivalMove(game, onRetry) {
 }
 
 // ---- グループ（1台の端末を回して遊ぶメンバー。進み具合はグループごとに保存） ----
-const SOLO = { id: 'solo', name: 'ひとりで', players: ['あなた'], npc: true };
-function loadGroups() { const g = load('groups', []); return g.some(x => x.id === 'solo') ? g : [SOLO, ...g]; }
+// 最初からある2つ：ひとりで AI が審判（AIプレイヤーあり）／ひとりで人が出題者（AIプレイヤーなし）。消せない
+const SOLO = { id: 'solo', name: 'ひとりで', players: ['あなた'], npc: true, judge: 'ai' };
+const SOLO_HUMAN = { id: 'solo-human', name: 'ひとりで', players: ['あなた'], npc: false, judge: 'human' };
+const isBuiltinGroup = id => id === 'solo' || id === 'solo-human';
+function loadGroups() {
+  const g = load('groups', []);
+  const builtins = [SOLO, SOLO_HUMAN].map(b => ({ ...b, ...(g.find(x => x.id === b.id) || {}) }));
+  return [...builtins, ...g.filter(x => !isBuiltinGroup(x.id))];
+}
 function currentGroup() { const gs = loadGroups(); return gs.find(g => g.id === load('group', 'solo')) || gs[0]; }
 // 「ひとりで」は従来の保存（games）をそのまま使う
 function gamesKey(gid) { return gid === 'solo' ? 'games' : `games-${gid}`; }
@@ -1628,7 +1635,7 @@ function loadScript(src, ready) {
 const loadPeer = () => loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', () => !!window.Peer);
 const loadQr = () => loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js', () => !!window.qrcode);
 
-function roomGroup() { const g = currentGroup(); return g.chat && g.id !== 'solo' ? g : null; }
+function roomGroup() { const g = currentGroup(); return g.chat && !isBuiltinGroup(g.id) ? g : null; }
 function roomPending() { return !!(game && game.moves.length && game.moves[game.moves.length - 1].pending); }
 function myName() { return client.active ? client.name : game && game.room ? roomMe() : null; }
 
@@ -2946,7 +2953,7 @@ function renderGroupBar() {
   sel.textContent = '';
   loadGroups().forEach(g => {
     const judge = (g.judge || load('judge', 'ai')) === 'human' ? '人が出題者' : 'AIが審判';
-    const who = g.id === 'solo' ? '' : `（${g.players.length}人${g.npc && judge === 'AIが審判' ? '＋AI' : ''}）`;
+    const who = isBuiltinGroup(g.id) ? '' : `（${g.players.length}人${g.npc && judge === 'AIが審判' ? '＋AI' : ''}）`;
     sel.appendChild(new Option(`${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
   });
   sel.appendChild(new Option('＋ 新しいグループ', '__new'));
@@ -2958,12 +2965,13 @@ function openGroup(g) {
   document.getElementById('g-title').textContent = g ? 'グループを編集' : '新しいグループ';
   document.getElementById('g-name').value = g ? g.name : '';
   document.getElementById('g-players').value = g ? g.players.join('\n') : '';
-  document.getElementById('g-npc').checked = g ? g.npc : true;
-  document.getElementById('g-judge').value = (g && g.judge) || judgeMode;
+  // 新しいグループは、人が出題者・AIプレイヤーなしから始める
+  document.getElementById('g-npc').checked = g ? g.npc : false;
+  document.getElementById('g-judge').value = g ? g.judge || judgeMode : 'human';
   document.getElementById('g-chat').checked = !!(g && g.chat);
-  const solo = !!g && g.id === 'solo';
+  const solo = !!g && isBuiltinGroup(g.id);
   ['g-chat-wrap', 'g-chat-note'].forEach(id => document.getElementById(id).classList.toggle('hidden', solo));
-  document.getElementById('g-delete').classList.toggle('hidden', !g || g.id === 'solo');
+  document.getElementById('g-delete').classList.toggle('hidden', !g || solo);
   document.getElementById('g-error').textContent = '';
   document.getElementById('group-modal').classList.remove('hidden');
 }
@@ -2978,7 +2986,7 @@ function saveGroupFromForm() {
   const id = editingGroupId || 'g' + Date.now().toString(36);
   const old = groups.find(x => x.id === id) || {};
   const judge = document.getElementById('g-judge').value;
-  const chat = id !== 'solo' && document.getElementById('g-chat').checked;
+  const chat = !isBuiltinGroup(id) && document.getElementById('g-chat').checked;
   // 部屋の番号はグループごとに固定（招待リンク・QR を使い回せるように）。この端末の人（me）も引き継ぐ
   const g = { id, name, players, npc, judge, chat, room: old.room || newRoomCode(), ...(old.me ? { me: old.me } : {}) };
   const i = groups.findIndex(x => x.id === id);
@@ -3264,7 +3272,7 @@ document.getElementById('g-save').onclick = () => {
 };
 document.getElementById('g-delete').onclick = () => {
   const g = loadGroups().find(x => x.id === editingGroupId);
-  if (!g || g.id === 'solo') return;
+  if (!g || isBuiltinGroup(g.id)) return;
   if (!confirm(`「${g.name}」を削除しますか？\n（このグループの進み具合も消えます）`)) return;
   save('groups', loadGroups().filter(x => x.id !== g.id));
   try { localStorage.removeItem(LS + gamesKey(g.id)); } catch (e) { /* 消せなくても動作に影響しない */ }
