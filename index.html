@@ -83,6 +83,30 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .board-ops button { padding: 4px 10px; font-size: 13px; }
 .hints { margin: 0 0 8px; padding: 6px 10px 6px 2em; background: var(--chip); border-radius: 8px; font-size: 14px; max-height: 20dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hints li { margin: 2px 0; }
+.room-panel { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; background: var(--panel); font-size: 14px; }
+.room-panel .room-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.room-panel .room-code { font-weight: bold; font-size: 16px; letter-spacing: .1em; margin-right: auto; }
+.room-panel .room-row { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.room-panel select { font-size: 16px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.join-requests { border-bottom: 1px solid var(--line); background: var(--panel); padding: 8px 12px; font-size: 14px; }
+.join-requests .req { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+.join-requests .req span { flex: 1; min-width: 0; }
+.survey .stars { display: flex; gap: 4px; margin: 6px 0; }
+.survey .stars button { font-size: 26px; line-height: 1; padding: 2px 4px; border: none; background: none; color: #d9a400; cursor: pointer; }
+.survey textarea { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.survey .answers li { margin: 4px 0; }
+.qr-box { display: flex; justify-content: center; margin: 12px 0; }
+.qr-box img { width: 240px; height: 240px; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 8px; }
+.join { padding: 16px; overflow-y: auto; }
+.join h2 { font-size: 17px; }
+.join .members { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
+.join input { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); margin: 6px 0; }
+.parent-panel { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--panel); max-height: 55%; overflow-y: auto; }
+.parent-panel .labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.parent-panel .labels button { font-size: 14px; padding: 6px 10px; }
+.parent-panel input, .parent-panel select { width: 100%; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin: 4px 0; }
+.parent-panel .pending-q { font-weight: bold; margin: 4px 0; }
+.parent-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .group-bar { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
 .group-label { flex: none; font-size: 13px; color: var(--sub); }
 .judge-bar { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
@@ -234,6 +258,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <button id="btn-about">遊び方</button>
     <button id="btn-settings">設定</button>
   </header>
+  <div id="join-requests" class="join-requests hidden"></div>
   <main id="view-list">
     <p class="intro">謎はすべて実話です。AIプレイヤーや友達と順番に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
     重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。<br>
@@ -244,13 +269,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <button id="judge-ai">AI が審判</button>
       <button id="judge-human">人が出題者</button>
     </div>
-    <p class="note hidden" id="judge-human-note">出題者が1人で答えを見て、ほかの人の質問に「はい／いいえ」で答えます。ほかの人は画面を使わず、口頭で遊びます。APIキーは要りません。</p>
+    <p class="note hidden" id="judge-human-note">出題者が1人で答えを見て、ほかの人の質問に「はい／いいえ」で答えます。ほかの人は画面を使わず、口頭で遊びます。APIキーは要りません。<br>
+    各自のスマホから質問したいときは、グループの設定で「チャットで遊ぶ」を入れてください。</p>
     <div class="group-bar">
       <span class="group-label">遊ぶ人</span>
       <select id="group-select" aria-label="遊ぶグループ"></select>
       <button id="btn-group-edit">編集</button>
       <button id="btn-group-new" aria-label="グループを追加" title="グループを追加">＋</button>
     </div>
+    <div id="room-panel" class="room-panel hidden"></div>
     <div class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加</button>
     <button id="btn-library">問題集の保存・共有</button></div>
     <div class="search-row">
@@ -288,6 +315,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
         </div>
       </div>
       <div class="history" id="history"></div>
+      <div class="parent-panel hidden" id="parent-panel"></div>
       <div class="composer">
         <div class="turn-now" id="turn-now"></div>
         <textarea id="input" placeholder="質問（例：それは食べ物ですか？）か、真相を書いてください"></textarea>
@@ -301,6 +329,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     </div>
   </div>
   <main id="view-reveal" class="hidden reveal"></main>
+  <main id="view-join" class="hidden join"></main>
 </div>
 
 <div id="add-puzzle" class="overlay hidden">
@@ -329,6 +358,25 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   </div>
 </div>
 
+<div id="parent-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>親（出題者）を選ぶ</h2>
+    <p class="note">親だけが答えを見られます。親は質問に答える役で、手番には入りません。</p>
+    <div id="parent-choices" class="parent-choices"></div>
+    <div class="row"><button id="parent-cancel">やめる</button></div>
+  </div>
+</div>
+
+<div id="qr-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>参加用の QR コード</h2>
+    <p class="note">参加する人は、自分のスマホのカメラでこの QR コードを読み取ってください。</p>
+    <div id="qr-box" class="qr-box"></div>
+    <p class="note" id="qr-url"></p>
+    <div class="row"><button id="qr-close" class="primary">閉じる</button></div>
+  </div>
+</div>
+
 <div id="group-modal" class="overlay hidden">
   <div class="modal">
     <h2 id="g-title">グループ</h2>
@@ -338,7 +386,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <input id="g-name" type="text" placeholder="例: 家族、サークル"></label>
     <label>プレイヤー（1行に1人。この順番で手番が回ります）
     <textarea id="g-players" rows="5" placeholder="たろう&#10;はなこ"></textarea></label>
-    <label class="check"><input type="checkbox" id="g-npc"> AIプレイヤーも参加する</label>
+    <label>審判
+    <select id="g-judge">
+      <option value="ai">AI が審判</option>
+      <option value="human">人が出題者（親）</option>
+    </select></label>
+    <label class="check" id="g-chat-wrap"><input type="checkbox" id="g-chat"> チャットで遊ぶ（各自のスマホから参加する）</label>
+    <p class="note" id="g-chat-note">この端末がホストになって部屋を開き、ほかの人は招待リンクか QR コードで自分のスマホから参加します。問題はこの端末の問題集から選び、AI が審判のときはこの端末のキーを使います。部屋の番号はグループごとに決まっているので、同じ招待リンクを何度でも使えます。</p>
+    <label class="check"><input type="checkbox" id="g-npc"> AIプレイヤーも参加する（AI が審判のときだけ）</label>
     <p class="note">メンバーを変えても、対戦中の問題は始めたときのメンバーのまま続きます。</p>
     <p class="error" id="g-error"></p>
     <div class="row">
@@ -391,6 +446,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <li>問題一覧の上の「＋ グループ」で、グループ名とメンバーを登録します。1台の端末を、表示される「〇〇の番です」の順に回して遊びます</li>
       <li>AIプレイヤーを入れるかどうかも選べます。入れなくても遊べます</li>
       <li>グループはいくつでも登録でき、一覧の上で切り替えられます。遊んだ・対戦中といった進み具合はグループごとに保存されるので、後日そのグループで続きから遊べます</li>
+      <li><b>チャットで遊ぶ</b>：グループの設定で入れると、この端末がホストになって部屋を開き、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要）。問題はホストの問題集から選び、AI が審判ならホストのキーで判定します。人が出題者のときは問題ごとに親を選び、答えは親の端末にだけ出ます。親は「はい／いいえ／ややそう／ややそうではない／どちらともいえない／分からない／その他（自由入力）」で答えます。部屋に入るにはホストの許可が要ります（一度許可した端末は次から許可なしで入れます）。問題が終わったら全員に星とコメントのアンケートが出ます（スキップ可）。評価は、その問題が入っている問題集（データリポジトリ）に取りまとめて保存します（ホストか、参加者のうち書き込める人が書きます。誰も書けないときはホストの端末にだけ残ります）。結果の書き出しは参加者もできます</li>
       <li>対戦画面の「問題と経過を共有」で、問題文とこれまでの質問・回答・得点・次の番を LINE グループなどに貼れます（答えは含まれません）</li>
     </ul>
 
@@ -615,7 +671,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.44';
+const APP_VERSION = 'v0.1.45';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1019,6 +1075,10 @@ ${JSON.stringify(GEN_EXAMPLE, null, 2)}
 
 ${genRulesText('puzzles/ にある既存の問題とは別の題材にする（先に一覧を確認する）', 'id は上の「問題の形式」の決まり（題材名-日付-ランダム4文字）で付け、puzzles/ に同じ名前のファイルが無いことを確かめる')}
 
+## 遊んだ人の評価
+- \`reviews/<id>.json\`（問題と同じ id）に、部屋で遊んだあとのアンケート（星1〜5とコメント）がアプリから追記される。中身は遊んだ回ごとの配列（\`date\`・\`players\`・\`ratings\`＝名前ごとの \`stars\` と \`comment\`）
+- 問題の直しを頼まれたら、この評価とコメントも参考にする。評価のファイルは書き換えない
+
 ## 編集のルール
 - 1問1ファイル。新しい問題は必ず新しいファイルで追加する。既存のファイルを書き換えるのは、その問題を直すよう頼まれたときだけ
 - 既存の問題を直すときは、そのファイルだけを変更する。id（ファイル名）は変えない
@@ -1386,10 +1446,13 @@ function normalizeGame(g) {
     moves: g.moves.map(m => ({ ...m, by: idx(m.by) })),
   };
 }
+let roomNewGame = null;   // 部屋で始めるときの顔ぶれ・審判・親（startRoomPuzzle が入れる）
 function newGame(puzzle) {
   const grp = currentGroup();
-  const players = [...grp.players.map(name => ({ name, ai: false })), ...(grp.npc ? [{ name: 'AIプレイヤー', ai: true }] : [])];
-  return { puzzleId: puzzle.id, puzzle, groupId: grp.id, players, moves: [], found: {}, scores: players.map(() => 0), turn: 0, finished: false, result: null };
+  const o = roomNewGame; roomNewGame = null;
+  const players = o ? o.players : [...grp.players.map(name => ({ name, ai: false })), ...(grp.npc ? [{ name: 'AIプレイヤー', ai: true }] : [])];
+  return { puzzleId: puzzle.id, puzzle, groupId: grp.id, players, moves: [], found: {}, scores: players.map(() => 0), turn: 0, finished: false, result: null, started: Date.now(),
+    ...(o ? { room: true, judge: o.judge, parent: o.parent || '' } : {}) };
 }
 function saveGame() {
   const gid = game.groupId || 'solo';
@@ -1421,11 +1484,14 @@ function scoreOf(reply, discovery) {
 }
 
 async function playerMove(kind) {
-  if (busy || game.finished || isAI(game.turn)) return;
+  if (client.active) return clientMove(kind);
+  if (busy || game.finished || isAI(game.turn) || roomPending()) return;
+  if (game.room && pName(game.turn) !== roomMe()) return;
   const input = document.getElementById('input');
   const text = input.value.trim();
   if (!text) return;
   const by = game.turn;
+  if (game.room && game.judge === 'human') { input.value = ''; return hostMove(by, kind, text); }
   setBusy(true, `審判が${pName(by)}の${kind === 'question' ? '質問' : '解答'}を判定しています…`);
   try {
     const ok = await applyMove(by, kind, text);
@@ -1444,6 +1510,8 @@ async function applyMove(by, kind, text) {
     const r = await askGM('question', text, game, answerData);
     if (r.answerLike) {
       if (!isAI(by)) {
+        // 部屋で別の端末の人の手なら、その人の端末で確かめてもらう（送り直されたら解答として判定）
+        if (isRemote(by)) { roomSendTo(pName(by), { t: 'confirm-answer', text }); return false; }
         const asAnswer = confirm('この質問は真相をまとめて当てにいく形なので、解答として扱います。\n解答として判定しますか？（外れると−1）\n\n「キャンセル」で書き直せます。');
         if (!asAnswer) return false;
       }
@@ -1523,14 +1591,15 @@ async function shareProgress() {
 
 // ヒント：得点は変わらず手番も使わない。全員の合意で1つずつ開き、全員に見える
 function renderHints() {
-  const all = (answerData && answerData.hints) || [];
-  const shown = shownHints();
+  // 参加者の端末は答え（ヒント全体）を持たないので、ホストから届いた開いたヒントだけを出す
+  const all = game.remoteHints || (answerData && answerData.hints) || [];
+  const shown = game.remoteHints || shownHints();
   const list = document.getElementById('hint-list');
   list.textContent = '';
   shown.forEach(t => list.appendChild(el('li', '', t)));
   list.classList.toggle('hidden', !shown.length);
   const b = document.getElementById('btn-hint');
-  b.classList.toggle('hidden', !all.length || game.finished);
+  b.classList.toggle('hidden', !all.length || game.finished || client.active);
   b.textContent = shown.length < all.length ? `ヒント（残り${all.length - shown.length}）` : 'ヒントは全部出ました';
   b.disabled = busy || shown.length >= all.length;
 }
@@ -1552,6 +1621,631 @@ function giveUp() {
   showReveal();
 }
 
+// ---- 部屋：各自の端末で遊ぶ（PeerJS・ホスト集約型。テンプレートの「端末間同期」の方式） ----
+// ホスト＝部屋を開いた端末。問題はホストの問題集から選び、AI が審判のときはホストのキーで判定する。
+// 進行の正本はホストが持ち、全員に配る。答えは、AI が審判なら答え合わせまで誰にも送らない。
+// 人が出題者（親）なら親の端末にだけ送る。設定（審判・チャット・部屋番号）はホストのグループに保存する
+const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 紛らわしい O/0/I/1 を除く
+function newRoomCode() {
+  let s = '';
+  crypto.getRandomValues(new Uint8Array(4)).forEach(x => s += ROOM_CHARS[x % ROOM_CHARS.length]);
+  return s;
+}
+const roomPeerId = code => `honkowa-soup-${code}`;
+const roomUrl = code => `${location.origin}${location.pathname}?room=${code}`;
+const REPLY_LABELS = ['はい', 'いいえ', 'ややそう', 'ややそうではない', 'どちらともいえない', '分からない'];
+function loadScript(src, ready) {
+  if (ready()) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = src; sc.onload = res; sc.onerror = () => { sc.remove(); rej(new Error('通信の部品を読み込めませんでした。通信状態を確かめてください。')); };
+    document.head.appendChild(sc);
+  });
+}
+const loadPeer = () => loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', () => !!window.Peer);
+const loadQr = () => loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js', () => !!window.qrcode);
+
+function roomGroup() { const g = currentGroup(); return g.chat && g.id !== 'solo' ? g : null; }
+function roomPending() { return !!(game && game.moves.length && game.moves[game.moves.length - 1].pending); }
+function myName() { return client.active ? client.name : game && game.room ? roomMe() : null; }
+
+// ---- ホスト側 ----
+const room = { peer: null, groupId: '', code: '', conns: [], status: '', error: '', requests: [] };   // conns: [{ conn, name }]・requests: 許可待ち [{ ent, name, device }]
+function roomMe() {
+  const g = loadGroups().find(x => x.id === room.groupId) || currentGroup();
+  return g.me && g.players.includes(g.me) ? g.me : g.players[0];
+}
+function presentNames() {
+  const g = loadGroups().find(x => x.id === room.groupId);
+  if (!g) return [];
+  const here = new Set([roomMe(), ...room.conns.filter(c => c.name).map(c => c.name)]);
+  return g.players.filter(n => here.has(n));
+}
+function isRemote(by) { return !!(game && game.room && !client.active && !isAI(by) && pName(by) !== roomMe()); }
+function ensureRoom() {
+  const g = roomGroup();
+  if (!g) { if (room.peer) closeRoom(); return; }
+  if (!g.room) { updateGroup(g.id, { room: newRoomCode() }); return ensureRoom(); }
+  // 開いている途中（部品の読み込み中）も同じ部屋なら開き直さない
+  if (room.groupId !== g.id || room.code !== g.room) openRoom(g);
+}
+function closeRoom() {
+  if (room.peer) { try { room.peer.destroy(); } catch (e) { /* 閉じる途中の失敗は無視 */ } }
+  room.peer = null; room.conns = []; room.groupId = ''; room.code = ''; room.status = ''; room.error = ''; room.requests = [];
+  renderJoinRequests();
+}
+async function openRoom(g) {
+  closeRoom();
+  room.groupId = g.id; room.code = g.room; room.status = '部屋を開いています…';
+  renderRoomPanel();
+  try { await loadPeer(); } catch (e) { room.status = ''; room.error = e.message; renderRoomPanel(); return; }
+  if (room.groupId !== g.id || room.code !== g.room || room.peer) return;
+  const peer = new Peer(roomPeerId(g.room));
+  room.peer = peer;
+  peer.on('open', () => { room.status = '開いています'; room.error = ''; renderRoomPanel(); });
+  peer.on('error', e => {
+    room.status = '';
+    room.error = e.type === 'unavailable-id' ? 'この部屋は、別の端末かタブで開かれています。そちらの画面を閉じてから「開き直す」を押してください。'
+      : ['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type) ? '仲介サーバーにつながりません。通信状態を確かめて「開き直す」を押してください。'
+      : `部屋を開けませんでした（${e.type}）`;
+    renderRoomPanel();
+  });
+  peer.on('disconnected', () => { if (!peer.destroyed) { try { peer.reconnect(); } catch (e) { /* 次の操作で開き直す */ } } });
+  peer.on('connection', conn => {
+    const ent = { conn, name: '' };
+    room.conns.push(ent);
+    conn.on('data', d => onHostData(ent, d));
+    conn.on('close', () => {
+      room.conns = room.conns.filter(x => x !== ent);
+      room.requests = room.requests.filter(r => r.ent !== ent);
+      renderJoinRequests(); renderRoomPanel(); roomBroadcast();
+    });
+  });
+}
+function onHostData(ent, d) {
+  if (!d || typeof d !== 'object') return;
+  const g = loadGroups().find(x => x.id === room.groupId);
+  if (!g) return;
+  if (d.t === 'hello') {
+    ent.conn.send({ t: 'welcome', group: g.name, judge: g.judge || 'ai', members: g.players, taken: presentNames() });
+  } else if (d.t === 'join') {
+    const name = String(d.name || '').trim().slice(0, 20);
+    if (!name) return;
+    if (name === roomMe() || room.conns.some(c => c !== ent && c.name === name)) { ent.conn.send({ t: 'join-ng', msg: `「${name}」はもう参加しています。別の名前を選んでください。` }); return; }
+    if (!g.players.includes(name) && g.players.length >= 8) { ent.conn.send({ t: 'join-ng', msg: 'メンバーは8人までです。' }); return; }
+    // 参加はホストの許可制。一度許可した端末（device）が同じ名前で入り直すときだけ、そのまま通す
+    const device = String(d.device || '').slice(0, 40);
+    if (device && (g.devices || {})[device] === name && g.players.includes(name)) { ent.canWrite = Array.isArray(d.canWrite) ? d.canWrite.map(String).slice(0, 20) : []; acceptJoin(ent, name, device); return; }
+    ent.canWrite = Array.isArray(d.canWrite) ? d.canWrite.map(String).slice(0, 20) : [];
+    room.requests = [...room.requests.filter(r => r.ent !== ent), { ent, name, device }];
+    ent.conn.send({ t: 'join-wait', name });
+    renderJoinRequests();
+  } else if (d.t === 'survey') {
+    if (ent.name) recordSurvey(String(d.puzzleId || ''), ent.name, d);
+  } else if (d.t === 'reviews-written') {
+    setReviewNote(String(d.puzzleId || ''), d.ok ? `評価を「${d.repoName}」に保存しました（${ent.name}が書き込み）` : `評価を問題集に保存できませんでした（${d.msg || ''}）。この端末には残っています`);
+  } else if (d.t === 'move') {
+    if (!ent.name || !game || !game.room || game.finished || busy || roomPending()) return;
+    const by = game.turn;
+    if (isAI(by) || pName(by) !== ent.name) return;
+    const text = String(d.text || '').trim().slice(0, 500);
+    if (text) hostMove(by, d.kind === 'answer' ? 'answer' : 'question', text);
+  } else if (d.t === 'reply') {
+    if (ent.name && game && game.room && game.judge === 'human' && ent.name === game.parent) applyParentReply(d);
+  }
+}
+function acceptJoin(ent, name, device) {
+  const g = loadGroups().find(x => x.id === room.groupId);
+  if (!g) return;
+  if (name === roomMe() || room.conns.some(c => c !== ent && c.name === name)) { ent.conn.send({ t: 'join-ng', msg: `「${name}」はもう参加しています。別の名前を選んでください。` }); return; }
+  const players = g.players.includes(name) ? g.players : [...g.players, name];   // 追加メンバーはグループにも登録する
+  if (players.length > 8) { ent.conn.send({ t: 'join-ng', msg: 'メンバーは8人までです。' }); return; }
+  updateGroup(g.id, { players, devices: { ...(g.devices || {}), ...(device ? { [device]: name } : {}) } });
+  ent.name = name;
+  ent.conn.send({ t: 'joined', name });
+  // 対戦中なら途中から加わる（親は手番に入らない。AIプレイヤーより前に入れる）
+  if (game && game.room && !game.finished && name !== game.parent && !game.players.some(p => p.name === name)) {
+    const at = game.players.findIndex(p => p.ai);
+    const i = at < 0 ? game.players.length : at;
+    game.players.splice(i, 0, { name, ai: false });
+    game.scores.splice(i, 0, 0);
+    game.moves.forEach(m => { if (m.by >= i) m.by++; });
+    Object.keys(game.found).forEach(k => { if (game.found[k] >= i) game.found[k]++; });
+    if (typeof game.result === 'number' && game.result >= i) game.result++;
+    if (game.turn >= i && !(game.turn === i && at < 0)) game.turn++;
+    saveGame();
+    if (!document.getElementById('view-game').classList.contains('hidden')) renderGame();
+  }
+  renderRoomPanel();
+  roomBroadcast();
+}
+function answerJoinRequest(req, ok) {
+  room.requests = room.requests.filter(r => r !== req);
+  renderJoinRequests();
+  if (ok) acceptJoin(req.ent, req.name, req.device);
+  else req.ent.conn.send({ t: 'join-ng', msg: 'ホストが参加を断りました。', declined: true });
+}
+// 許可待ちの表示（一覧・対戦・結果のどの画面でも上に出す）
+function renderJoinRequests() {
+  const box = document.getElementById('join-requests');
+  box.textContent = '';
+  box.classList.toggle('hidden', !room.requests.length);
+  const g = loadGroups().find(x => x.id === room.groupId);
+  room.requests.forEach(req => {
+    const row = el('div', 'req');
+    const isNew = !g || !g.players.includes(req.name);
+    row.appendChild(el('span', '', `「${req.name}」が部屋に入りたいそうです${isNew ? '（新しいメンバー）' : ''}`));
+    const ok = el('button', 'primary', '許可'); ok.onclick = () => answerJoinRequest(req, true);
+    const ng = el('button', '', '断る'); ng.onclick = () => answerJoinRequest(req, false);
+    row.append(ok, ng);
+    box.appendChild(row);
+  });
+}
+// 問題が終わったら全員にアンケート（星1〜5とコメント・スキップ可）。答えはホストの対戦記録に入れ、全員に配る
+function recordSurvey(puzzleId, name, d) {
+  const all = loadGames(room.groupId);
+  const g = game && game.room && game.puzzleId === puzzleId ? game : all[puzzleId];
+  if (!g || !g.room || !g.finished) return;
+  const stars = Math.round(Number(d.stars));
+  g.survey = { ...(g.survey || {}), [name]: d.skip || !(stars >= 1 && stars <= 5) ? { skip: true } : { stars, comment: String(d.comment || '').trim().slice(0, 300) } };
+  all[puzzleId] = g; saveGames(all, room.groupId);
+  if (g === game) { renderSurvey(); roomBroadcast(); }
+  scheduleReviewWrite(puzzleId);
+}
+// ---- 評価を問題集（データリポジトリ）に書く ----
+// ホストが評価を取りまとめ、その問題が入っている問題集のリポジトリへ書く。書く人はホスト本人が書ければホスト、
+// だめなら参加者のうち書き込める人（持ち主本人・問題を追加できる招待を持つ人）の1人に頼む。誰も書けなければホストの端末にだけ残す。
+// 回答が届くたびに少し待ってから、その回の分を上書き保存する（同じ回は1件にまとめる）
+function puzzleRepo(id) {
+  const e = pkgIndex[id];
+  if (!e) return null;   // サンプル問題・まだリポジトリに送っていない問題
+  if (e.from === 'mine') return myRepo.repo || null;
+  if (typeof e.from === 'object') return e.from.repo;
+  return null;
+}
+function repoLabel(repo) {
+  const c = collections.find(x => x.repo === repo);
+  return c ? `${c.name}の問題集` : repo === myRepo.repo ? `${roomMe()}（ホスト）の問題集` : repo;
+}
+const reviewTimers = {};
+function scheduleReviewWrite(puzzleId) {
+  clearTimeout(reviewTimers[puzzleId]);
+  reviewTimers[puzzleId] = setTimeout(() => writeReviewsFor(puzzleId), 3000);
+}
+function reviewEntry(g) {
+  const ratings = {};
+  Object.entries(g.survey || {}).forEach(([n, r]) => { if (!r.skip) ratings[n] = { stars: r.stars, ...(r.comment ? { comment: r.comment } : {}) }; });
+  return { id: `${g.puzzleId}-${g.started || 0}`, date: new Date(g.started || Date.now()).toISOString().slice(0, 10), players: surveyNames(g), ratings };
+}
+async function writeReviewsFor(puzzleId) {
+  const all = loadGames(room.groupId);
+  const g = game && game.puzzleId === puzzleId && game.room ? game : all[puzzleId];
+  if (!g || !g.survey) return;
+  const entry = reviewEntry(g);
+  if (!Object.keys(entry.ratings).length) return;   // 全員スキップなら書かない
+  const repo = puzzleRepo(puzzleId);
+  if (!repo) { setReviewNote(puzzleId, 'この問題は問題集（データリポジトリ）に入っていないので、評価はこの端末にだけ残します'); return; }
+  const token = tokenFor(repo);
+  if (token) {
+    try { await ghUpsertReview(repo, token, puzzleId, entry); setReviewNote(puzzleId, `評価を「${repoLabel(repo)}」に保存しました`); }
+    catch (e) { setReviewNote(puzzleId, `評価を問題集に保存できませんでした（${e.message}）。この端末には残っています`); }
+    return;
+  }
+  const writer = room.conns.find(c => c.name && (c.canWrite || []).includes(repo));
+  if (!writer) { setReviewNote(puzzleId, `「${repoLabel(repo)}」に書き込める人がいないので、評価はこの端末にだけ残します`); return; }
+  writer.conn.send({ t: 'write-reviews', repo, repoName: repoLabel(repo), puzzleId, entry });
+}
+function setReviewNote(puzzleId, note) {
+  if (game && game.puzzleId === puzzleId) { game.reviewNote = note; renderSurvey(); roomBroadcast(); }
+}
+// reviews/<id>.json：遊んだ回ごとの配列。同じ回（id）は置き換え、sha が合わなければ1回だけ読み直してやり直す
+async function ghUpsertReview(repo, token, puzzleId, entry) {
+  const url = ghUrl(repo, `reviews/${puzzleId}.json`);
+  const attempt = async () => {
+    const r = await fetch(url, { headers: ghHeaders(token), cache: 'no-store' });
+    let list = [], sha = null;
+    if (r.ok) {
+      const j = await r.json(); sha = j.sha;
+      try { list = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, '')), ch => ch.charCodeAt(0)))); } catch (e) { list = []; }
+      if (!Array.isArray(list)) list = [];
+    } else if (r.status !== 404) throw new Error(ghErrorText(r.status));
+    list = [...list.filter(x => x.id !== entry.id), entry];
+    return fetch(url, { method: 'PUT', headers: ghHeaders(token), body: JSON.stringify({ message: `評価を記録：${puzzleId}`, content: b64utf8(JSON.stringify(list, null, 2) + '\n'), ...(sha ? { sha } : {}) }) });
+  };
+  let res = await attempt();
+  if (res.status === 409 || res.status === 422) res = await attempt();
+  if (!res.ok) throw new Error(ghErrorText(res.status));
+}
+function surveyNames(g = game) { return [...g.players.filter(p => !p.ai).map(p => p.name), ...(g.parent ? [g.parent] : [])]; }
+let surveyStars = 0;
+function renderSurvey() {
+  const box = document.getElementById('survey-box');
+  if (!box || !game || !game.room) return;
+  box.textContent = '';
+  box.appendChild(el('h2', '', 'この問題はどうでしたか？'));
+  const me = myName(), mine = (game.survey || {})[me];
+  if (!mine) {
+    const stars = el('div', 'stars');
+    for (let i = 1; i <= 5; i++) {
+      const b = el('button', '', i <= surveyStars ? '★' : '☆');
+      b.setAttribute('aria-label', `星${i}つ`);
+      b.onclick = () => { surveyStars = i; renderSurvey(); };
+      stars.appendChild(b);
+    }
+    const note = el('textarea'); note.rows = 2; note.placeholder = 'コメント（任意）'; note.id = 'survey-comment';
+    note.value = box.dataset.draft || '';
+    note.oninput = () => { box.dataset.draft = note.value; };
+    const row = el('div', 'row');
+    const skip = el('button', '', 'スキップ'); skip.onclick = () => sendSurvey({ skip: true });
+    const ok = el('button', 'primary', '送る'); ok.disabled = !surveyStars;
+    ok.onclick = () => sendSurvey({ stars: surveyStars, comment: note.value });
+    row.append(skip, ok);
+    box.append(stars, note, row);
+  }
+  const list = el('ul', 'answers');
+  surveyNames().forEach(n => {
+    const r = (game.survey || {})[n];
+    const txt = !r ? '（まだ）' : r.skip ? 'スキップ' : `${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}${r.comment ? `　${r.comment}` : ''}`;
+    list.appendChild(el('li', '', `${n}：${txt}`));
+  });
+  const done = Object.values(game.survey || {}).filter(r => !r.skip);
+  if (done.length) box.appendChild(el('p', 'note', `平均 ★${(done.reduce((a, r) => a + r.stars, 0) / done.length).toFixed(1)}（${done.length}人）`));
+  box.appendChild(list);
+  if (game.reviewNote) box.appendChild(el('p', 'note', game.reviewNote));
+}
+function sendSurvey(r) {
+  const me = myName();
+  game.survey = { ...(game.survey || {}), [me]: r.skip ? { skip: true } : { stars: r.stars, comment: String(r.comment || '').trim().slice(0, 300) } };
+  surveyStars = 0;
+  if (client.active) client.conn && client.conn.send({ t: 'survey', puzzleId: game.puzzleId, ...r });
+  else recordSurvey(game.puzzleId, me, r);
+  renderSurvey();
+}
+function roomSendTo(name, msg) {
+  room.conns.filter(c => c.name === name).forEach(c => { try { c.conn.send(msg); } catch (e) { /* 切れた相手は close で外れる */ } });
+}
+// 全員に配る中身。答えは入れない（親にだけ別に付ける。答え合わせ後は全員に付ける）
+function publicState() {
+  const g = loadGroups().find(x => x.id === room.groupId);
+  if (!game || !game.room || game.groupId !== room.groupId) return { lobby: true, group: g ? g.name : '', present: presentNames() };
+  const pz = game.puzzle;
+  return {
+    puzzle: { id: pz.id, title: pz.title, question_text: pz.question_text, difficulty: pz.difficulty },
+    players: game.players, moves: game.moves, scores: game.scores, found: game.found, turn: game.turn,
+    finished: game.finished, result: game.result, judge: game.judge, parent: game.parent || '',
+    hintTexts: shownHints(), busy: busy ? statusLabel : '', error: lastError && !busy ? lastError.message : '',
+    reveal: game.finished && answerData ? { puzzle: pz, answer: answerData } : null, survey: game.survey || {}, reviewNote: game.reviewNote || '',
+  };
+}
+function roomBroadcast() {
+  if (!room.peer || client.active) return;
+  const s = publicState();
+  room.conns.forEach(c => {
+    if (!c.name) return;
+    const msg = { t: 'state', s };
+    if (!s.lobby && game.judge === 'human' && c.name === game.parent && answerData) msg.ans = answerData;
+    try { c.conn.send(msg); } catch (e) { /* 切れた相手は close で外れる */ }
+  });
+}
+async function hostMove(by, kind, text) {
+  if (game.judge === 'human') {
+    // 人が出題者：親の回答を待つ。回答は applyParentReply で入る
+    game.moves.push({ by, kind, text, reply: '', pts: 0, pending: true });
+    saveGame(); renderGame();
+    return;
+  }
+  setBusy(true, `審判が${pName(by)}の${kind === 'question' ? '質問' : '解答'}を判定しています…`);
+  try { await applyMove(by, kind, text); }
+  catch (e) { showError(e); }
+  finally { setBusy(false); }
+  if (!game.finished && isAI(game.turn)) runRival();
+}
+function applyParentReply(d) {
+  const m = game.moves[game.moves.length - 1];
+  if (!m || !m.pending) return;
+  if (m.kind === 'answer') {
+    const ok = !!d.correct;
+    m.reply = ok ? '正解' : '不正解'; m.pts = ok ? 2 : -1;
+    if (ok) { game.finished = true; game.result = m.by; }
+  } else {
+    const label = REPLY_LABELS.includes(d.label) ? d.label : String(d.text || '').trim().slice(0, 200);
+    if (!label) return;
+    m.reply = label; m.pts = 0;
+    if (d.discovery && answerData.discoveries.some(x => x.id === d.discovery) && game.found[d.discovery] === undefined) {
+      m.discovery = d.discovery; game.found[d.discovery] = m.by; m.pts = 1;
+    }
+  }
+  game.scores[m.by] += m.pts;
+  delete m.pending;
+  game.turn = (m.by + 1) % game.players.length;
+  saveGame(); renderGame();
+  if (game.finished) setTimeout(showReveal, 900);
+}
+let parentResolve = null;
+function chooseParent(names) {
+  const box = document.getElementById('parent-choices');
+  box.textContent = '';
+  names.forEach(n => { const b = el('button', '', n); b.onclick = () => closeParentModal(n); box.appendChild(b); });
+  document.getElementById('parent-modal').classList.remove('hidden');
+  return new Promise(res => { parentResolve = res; });
+}
+function closeParentModal(v) {
+  document.getElementById('parent-modal').classList.add('hidden');
+  if (parentResolve) { const r = parentResolve; parentResolve = null; r(v); }
+}
+async function startRoomPuzzle(p) {
+  const g = roomGroup();
+  if (!g) return;
+  if (!room.peer || room.status !== '開いています') { alert('部屋がまだ開いていません。一覧の上の部屋の表示を確かめてください。'); return; }
+  const saved = loadGames()[p.id];
+  if (saved && !saved.finished && saved.room) return startPuzzle(p);   // 対戦中の問題は続きから
+  const present = presentNames();
+  if ((g.judge || 'ai') === 'human') {
+    const parent = await chooseParent(present);
+    if (!parent) return;
+    const players = present.filter(n => n !== parent).map(name => ({ name, ai: false }));
+    if (!players.length) { alert('親のほかに、質問する人が1人以上必要です。'); return; }
+    roomNewGame = { judge: 'human', parent, players };
+  } else {
+    if (!settings.key && !settings.groqKey) { openSettings(); return; }
+    roomNewGame = { judge: 'ai', players: [...present.map(name => ({ name, ai: false })), ...(g.npc ? [{ name: 'AIプレイヤー', ai: true }] : [])] };
+  }
+  await startPuzzle(p);
+  roomNewGame = null;
+}
+async function showRoomQr() {
+  const url = roomUrl(room.code);
+  try { await loadQr(); } catch (e) { alert(e.message); return; }
+  const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+  const box = document.getElementById('qr-box');
+  box.textContent = '';
+  const img = el('img'); img.src = qr.createDataURL(6, 0); img.alt = '参加用の QR コード';
+  box.appendChild(img);
+  document.getElementById('qr-url').textContent = url;
+  document.getElementById('qr-modal').classList.remove('hidden');
+}
+async function shareRoomLink() {
+  const g = roomGroup();
+  const url = roomUrl(room.code);
+  const text = `本当にあった怖いスープ「${g ? g.name : ''}」の部屋に参加してください（部屋番号 ${room.code}）`;
+  if (navigator.share) {
+    try { await navigator.share({ title: '本当にあった怖いスープ', text, url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  alert(await copyText(`${text}\n${url}`) ? '参加用のリンクをコピーしました。LINE などで送ってください。' : 'コピーできませんでした。');
+}
+function renderRoomPanel() {
+  const panel = document.getElementById('room-panel');
+  const g = roomGroup();
+  panel.classList.toggle('hidden', !g);
+  if (!g) return;
+  panel.textContent = '';
+  const head = el('div', 'room-head');
+  head.appendChild(el('span', 'room-code', `部屋 ${g.room || ''}`));
+  head.appendChild(el('span', room.error ? 'error' : 'note', room.error ? '閉じています' : room.status));
+  const share = el('button', '', '招待リンクを送る'); share.onclick = shareRoomLink;
+  const qrb = el('button', '', 'QR コード'); qrb.onclick = showRoomQr;
+  share.disabled = qrb.disabled = !room.code;
+  head.append(share, qrb);
+  panel.appendChild(head);
+  if (room.error) {
+    const er = el('div', 'room-row');
+    er.appendChild(el('span', 'error', room.error));
+    const re = el('button', '', '開き直す'); re.onclick = () => { closeRoom(); ensureRoom(); renderRoomPanel(); };
+    er.appendChild(re);
+    panel.appendChild(er);
+  }
+  const meRow = el('div', 'room-row');
+  meRow.appendChild(el('span', 'note', 'この端末の人'));
+  const sel = el('select');
+  g.players.forEach(n => sel.appendChild(new Option(n, n)));
+  sel.value = roomMe();
+  sel.onchange = () => { updateGroup(g.id, { me: sel.value }); renderRoomPanel(); roomBroadcast(); };
+  meRow.appendChild(sel);
+  panel.appendChild(meRow);
+  const here = presentNames();
+  panel.appendChild(el('div', 'room-row note', `参加中：${here.join('・')}（${here.length}人）・審判：${(g.judge || 'ai') === 'human' ? '人（親を問題ごとに選ぶ）' : 'AI'}`));
+}
+
+// ---- 親の操作（親の端末に出す。親がホスト自身なら直接、参加者なら返事をホストへ送る） ----
+let parentAnsOpen = false;
+function renderParentPanel() {
+  const panel = document.getElementById('parent-panel');
+  const amParent = !!(game && game.room && game.judge === 'human' && !game.finished && game.parent && game.parent === myName());
+  panel.classList.toggle('hidden', !amParent);
+  document.querySelector('#game .composer').classList.toggle('hidden', amParent);
+  if (!amParent) return;
+  const ans = client.active ? client.ans : answerData;
+  const send = d => client.active ? client.conn && client.conn.send({ t: 'reply', ...d }) : applyParentReply(d);
+  panel.textContent = '';
+  panel.appendChild(el('div', 'turn-now', 'あなたは親（出題者）です。答えはあなたにだけ見えています。'));
+  const m = game.moves[game.moves.length - 1];
+  if (m && m.pending) {
+    panel.appendChild(el('p', 'pending-q', `${pName(m.by)}の${m.kind === 'question' ? '質問' : '解答'}：${m.text}`));
+    const labels = el('div', 'labels');
+    if (m.kind === 'answer') {
+      [['正解', true], ['不正解', false]].forEach(([t, ok]) => { const b = el('button', ok ? 'primary' : '', t); b.onclick = () => send({ correct: ok }); labels.appendChild(b); });
+      panel.appendChild(labels);
+    } else {
+      const disc = el('select');
+      disc.appendChild(new Option('重要な事実の発見：なし', ''));
+      ((ans && ans.discoveries) || []).filter(x => game.found[x.id] === undefined).forEach(x => disc.appendChild(new Option(`発見（＋1）：${x.fact}`, x.id)));
+      REPLY_LABELS.forEach(t => { const b = el('button', t === 'はい' || t === 'いいえ' ? 'primary' : '', t); b.onclick = () => send({ label: t, discovery: disc.value }); labels.appendChild(b); });
+      panel.appendChild(labels);
+      const other = el('input'); other.placeholder = 'その他（自由に入力して送る）';
+      const ob = el('button', '', 'その他で答える');
+      ob.onclick = () => { if (other.value.trim()) send({ label: 'その他', text: other.value.trim(), discovery: disc.value }); };
+      panel.append(other, ob, disc);
+    }
+  } else {
+    panel.appendChild(el('p', 'note', `${pName(game.turn)}の質問を待っています。`));
+  }
+  const tg = el('button', 'link', parentAnsOpen ? '答えを隠す' : '答えを見る（親だけ）');
+  tg.onclick = () => { parentAnsOpen = !parentAnsOpen; renderParentPanel(); };
+  panel.appendChild(tg);
+  if (parentAnsOpen && ans) { const box = el('div', 'host-answer'); appendAnswer(box, game.puzzle.source ? game.puzzle : { ...game.puzzle, source: { title: '', url: '' } }, ans, game); panel.appendChild(box); }
+}
+
+// ---- 参加者側 ----
+// この端末の識別（ホストが一度許可した端末は、次から許可なしで入り直せる）
+// この端末で書き込めるデータリポジトリ（自分の問題集と、問題を追加できる招待で受け取った問題集）
+function writableRepos() {
+  return [...(myRepo.repo && myRepo.pat ? [myRepo.repo] : []), ...collections.filter(c => c.writable).map(c => c.repo)];
+}
+function tokenFor(repo) {
+  if (repo === myRepo.repo && myRepo.pat) return myRepo.pat;
+  const c = collections.find(x => x.repo === repo && x.writable);
+  return c ? c.token : '';
+}
+function deviceId() {
+  let id = load('device-id', '');
+  if (!id) { id = Array.from(crypto.getRandomValues(new Uint8Array(12)), x => x.toString(16).padStart(2, '0')).join(''); save('device-id', id); }
+  return id;
+}
+const client = { active: false, peer: null, conn: null, code: '', name: '', welcome: null, state: null, ans: null, revealed: '', timer: null };
+async function startClient(code) {
+  client.active = true; client.code = code;
+  document.getElementById('btn-settings').classList.add('hidden');
+  show('join');
+  renderJoin('connecting');
+  try { await loadPeer(); } catch (e) { renderJoin('error', e.message); return; }
+  if (client.peer) { try { client.peer.destroy(); } catch (e) { /* 作り直す */ } }
+  const peer = new Peer();
+  client.peer = peer;
+  clearTimeout(client.timer);
+  client.timer = setTimeout(() => { if (!client.welcome) renderJoin('nohost'); }, 15000);
+  peer.on('open', () => {
+    const conn = peer.connect(roomPeerId(code), { reliable: true });
+    client.conn = conn;
+    conn.on('open', () => conn.send({ t: 'hello' }));
+    conn.on('data', onClientData);
+    conn.on('close', () => renderJoin('lost'));
+  });
+  peer.on('error', e => renderJoin(e.type === 'peer-unavailable' ? 'nohost' : 'error', e.type));
+}
+function onClientData(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'welcome') {
+    client.welcome = d;
+    clearTimeout(client.timer);
+    // つなぎ直しのときは同じ名前で自動的に入り直す
+    const prev = client.name || load(`room-name-${client.code}`, '');
+    if (prev && !d.taken.includes(prev)) { client.conn.send({ t: 'join', name: prev, device: deviceId(), canWrite: writableRepos() }); return; }
+    renderJoin('pick');
+  } else if (d.t === 'join-wait') {
+    renderJoin('wait', d.name);
+  } else if (d.t === 'join-ng') {
+    if (d.declined) { client.name = ''; renderJoin('declined'); return; }
+    alert(d.msg); renderJoin('pick');
+  } else if (d.t === 'joined') {
+    client.name = d.name; save(`room-name-${client.code}`, d.name);
+    renderJoin('lobby');
+  } else if (d.t === 'state') {
+    client.state = d.s;
+    if (d.ans) client.ans = d.ans;
+    renderClient();
+  } else if (d.t === 'write-reviews') {
+    const token = tokenFor(d.repo);
+    if (!token) { client.conn.send({ t: 'reviews-written', puzzleId: d.puzzleId, ok: false, msg: '書き込みの権限がありません' }); return; }
+    ghUpsertReview(d.repo, token, d.puzzleId, d.entry)
+      .then(() => client.conn.send({ t: 'reviews-written', puzzleId: d.puzzleId, ok: true, repoName: d.repoName }))
+      .catch(e => client.conn.send({ t: 'reviews-written', puzzleId: d.puzzleId, ok: false, msg: e.message }));
+  } else if (d.t === 'confirm-answer') {
+    if (confirm(`「${d.text}」は真相をまとめて当てにいく形なので、解答として扱います。\n解答として判定しますか？（外れると−1）\n\n「キャンセル」で書き直せます。`)) client.conn.send({ t: 'move', kind: 'answer', text: d.text });
+    else document.getElementById('input').value = d.text;
+  }
+}
+function clientGame(s) {
+  return {
+    puzzleId: s.puzzle.id, puzzle: s.puzzle, players: s.players, moves: s.moves, found: s.found || {}, scores: s.scores,
+    turn: s.turn, finished: s.finished, result: s.result, hints: (s.hintTexts || []).length, remoteHints: s.hintTexts || [],
+    room: true, judge: s.judge, parent: s.parent, remoteBusy: s.busy, remoteError: s.error, survey: s.survey || {}, reviewNote: s.reviewNote || '',
+  };
+}
+function renderClient(forceLobby) {
+  const s = client.state;
+  if (!s || !client.name) return;
+  if (s.lobby) { game = null; client.ans = null; client.revealed = ''; renderJoin('lobby'); return; }
+  if (s.reveal) {
+    if (forceLobby || client.revealed === s.puzzle.id) { game = null; renderJoin('lobby'); return; }
+    if (document.getElementById('view-reveal').classList.contains('hidden') || !game || game.puzzleId !== s.puzzle.id || !game.finished) {
+      game = clientGame(s); game.puzzle = s.reveal.puzzle; answerData = s.reveal.answer;
+      surveyStars = 0;
+      showReveal('room');
+    } else {
+      // 結果の画面を出したまま、アンケートの集まり具合だけ更新する（書きかけのコメントを消さない）
+      const mine = game.survey[client.name];
+      game.survey = { ...s.survey, ...(mine && !s.survey[client.name] ? { [client.name]: mine } : {}) };
+      game.reviewNote = s.reviewNote || '';
+      renderSurvey();
+    }
+    return;
+  }
+  client.revealed = '';
+  const fresh = !game || game.puzzleId !== s.puzzle.id;
+  game = clientGame(s);
+  answerData = null;
+  if (fresh) { parentAnsOpen = false; document.getElementById('input').value = ''; }
+  show('game');
+  document.getElementById('title').textContent = s.puzzle.title;
+  document.getElementById('q-body').textContent = s.puzzle.question_text;
+  renderGame();
+}
+function clientMove(kind) {
+  if (!game || game.finished || !client.conn) return;
+  if (pName(game.turn) !== client.name || roomPending() || game.remoteBusy) return;
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+  client.conn.send({ t: 'move', kind, text });
+  input.value = '';
+}
+function renderJoin(stage, detail) {
+  if (stage !== 'lobby' || !game) show('join');
+  if (stage === 'lobby' && game) return;
+  document.getElementById('title').textContent = '本当にあった怖いスープ';
+  const v = document.getElementById('view-join');
+  v.textContent = '';
+  const w = client.welcome;
+  v.appendChild(el('h2', '', w ? `「${w.group}」の部屋（${client.code}）` : `部屋 ${client.code}`));
+  const retry = () => { const b = el('button', 'primary', 'もう一度つなぐ'); b.onclick = () => startClient(client.code); return b; };
+  if (stage === 'connecting') v.appendChild(el('p', 'note', 'ホストにつないでいます…'));
+  else if (stage === 'nohost') { v.appendChild(el('p', '', '部屋が見つかりません。ホストの端末でアプリが開いていて、部屋が「開いています」になっているか確かめてください。')); v.appendChild(retry()); }
+  else if (stage === 'lost') { v.appendChild(el('p', '', 'ホストとの接続が切れました。')); v.appendChild(retry()); }
+  else if (stage === 'error') { v.appendChild(el('p', 'error', `つなげませんでした（${detail}）。`)); v.appendChild(retry()); }
+  else if (stage === 'pick') {
+    v.appendChild(el('p', '', 'あなたはどなたですか？'));
+    const box = el('div', 'members');
+    w.members.forEach(n => {
+      const b = el('button', '', n);
+      b.disabled = w.taken.includes(n);
+      b.onclick = () => client.conn.send({ t: 'join', name: n, device: deviceId(), canWrite: writableRepos() });
+      box.appendChild(b);
+    });
+    v.appendChild(box);
+    v.appendChild(el('p', 'note', '一覧にいない人は、名前を入れて参加してください（メンバーに追加されます）。'));
+    const inp = el('input'); inp.placeholder = '例: じろう'; inp.maxLength = 20;
+    const go = el('button', 'primary', 'この名前で参加');
+    go.onclick = () => { if (inp.value.trim()) client.conn.send({ t: 'join', name: inp.value.trim(), device: deviceId(), canWrite: writableRepos() }); };
+    v.append(inp, go);
+  } else if (stage === 'wait') {
+    v.appendChild(el('p', '', `「${detail}」として参加を申し込みました。ホストが許可するのを待っています…`));
+  } else if (stage === 'declined') {
+    v.appendChild(el('p', '', 'ホストが参加を断りました。'));
+    const again = el('button', '', '名前を選び直す'); again.onclick = () => renderJoin('pick');
+    v.appendChild(again);
+  } else if (stage === 'lobby') {
+    v.appendChild(el('p', '', `${client.name}として参加しています。ホストが問題を選ぶのを待っています。`));
+    const s = client.state;
+    if (s && s.lobby && s.present) v.appendChild(el('p', 'note', `参加中：${s.present.join('・')}`));
+    v.appendChild(el('p', 'note', w && w.judge === 'human' ? '人が出題者のときは、問題ごとにホストが親を選びます。親になった人だけが答えを見られます。' : 'AI が審判です。答えは、答え合わせまで誰にも見えません。'));
+  }
+  const home = el('p');
+  const a = el('a', '', 'アプリのトップへ（部屋から出る）'); a.href = location.pathname;
+  home.appendChild(a);
+  v.appendChild(home);
+}
+
 // ---- 描画 ----
 function isWebUrl(u) { return /^https?:\/\//i.test(String(u || '').trim()); }
 function el(tag, cls, text) {
@@ -1566,9 +2260,13 @@ function renderGame() {
   const sl = document.getElementById('score-list');
   sl.textContent = '';
   game.players.forEach((p, i) => sl.appendChild(el('span', `p ${pCls(i)}${i === game.turn && !game.finished ? ' now' : ''}`, `${p.name} ${game.scores[i]}`)));
-  document.getElementById('turn-now').textContent = game.finished ? '' : `${pName(game.turn)}の番です`;
+  const pend = roomPending();
+  document.getElementById('turn-now').textContent = game.finished ? '' :
+    pend ? `親（${game.parent}）の回答を待っています` :
+    game.room && myName() && pName(game.turn) === myName() ? `あなた（${myName()}）の番です` : `${pName(game.turn)}の番です`;
   renderHints();
-  document.getElementById('btn-undo').classList.toggle('hidden', game.finished || !game.moves.some(m => !game.players[m.by].ai));
+  document.getElementById('btn-undo').classList.toggle('hidden', game.finished || client.active || !game.moves.some(m => !game.players[m.by].ai));
+  document.getElementById('btn-giveup').classList.toggle('hidden', client.active);
   document.getElementById('s-turns').textContent = game.moves.length + (game.finished ? 0 : 1);
   const h = document.getElementById('history');
   h.textContent = '';
@@ -1577,14 +2275,21 @@ function renderGame() {
     const d = el('div', 'move');
     d.appendChild(el('div', `who ${pCls(m.by)}`, `${i + 1}手目・${pName(m.by)}の${m.kind === 'question' ? '質問' : '解答'}`));
     d.appendChild(el('div', 'text', m.text));
-    const r = el('div', 'reply', `→ ${m.reply}`);
-    r.appendChild(el('span', `pts ${m.pts > 0 ? 'plus' : m.pts < 0 ? 'minus' : ''}`, ptsLabel(m.pts)));
+    const r = el('div', 'reply', m.pending ? '→ 親の回答待ち…' : `→ ${m.reply}`);
+    if (!m.pending) r.appendChild(el('span', `pts ${m.pts > 0 ? 'plus' : m.pts < 0 ? 'minus' : ''}`, ptsLabel(m.pts)));
     d.appendChild(r);
     if (m.discovery) d.appendChild(el('div', 'found', '重要な事実を発見！'));
     h.appendChild(d);
   });
   ['gm', 'rival'].forEach(r => { if (modelNotes[r] && !busy) h.appendChild(el('p', 'system', modelNotes[r])); });
   if (lastError && !busy) renderError(h);
+  if (game.remoteError && !game.remoteBusy) h.appendChild(el('div', 'system error', game.remoteError));
+  if (game.remoteBusy) {
+    const st = el('div', 'status');
+    st.appendChild(el('span', 'spinner'));
+    st.appendChild(el('span', '', game.remoteBusy));
+    h.appendChild(st);
+  }
   if (busy) {
     const st = el('div', 'status');
     st.appendChild(el('span', 'spinner'));
@@ -1595,8 +2300,10 @@ function renderGame() {
     updateStatusTime();
   }
   h.scrollTop = h.scrollHeight;
-  const myTurn = !isAI(game.turn) && !game.finished;
+  const myTurn = !isAI(game.turn) && !game.finished && !pend && !game.remoteBusy && (!game.room || pName(game.turn) === myName());
   ['btn-ask', 'btn-answer', 'btn-giveup'].forEach(id => document.getElementById(id).disabled = !myTurn || busy);
+  renderParentPanel();
+  roomBroadcast();
 }
 
 // AIの処理状況を履歴の末尾に表示する（経過秒数つき）。止まっていないことが分かるようにする
@@ -1663,7 +2370,7 @@ function showReveal(shared) {
   page.textContent = '';
   const v = el('div'); v.id = 'result-card';
   page.appendChild(v);
-  if (shared) v.appendChild(el('p', 'note', '共有された対戦結果です'));
+  if (shared && shared !== 'room') v.appendChild(el('p', 'note', '共有された対戦結果です'));
   v.appendChild(el('div', 'result-title', `本当にあった怖いスープ「${game.puzzle.title}」`));
   const rs = resultSummary();
   v.appendChild(el('div', 'result', rs.line));
@@ -1687,18 +2394,39 @@ function showReveal(shared) {
   v.appendChild(t);
   v.appendChild(el('p', 'note', `本当にあった怖いスープ  ${APP_URL}`));
 
+  // 共有リンクは、開いた人の端末に同じ問題が無いと読めない。参加者は自分の問題集にこの問題があるときだけ出す
+  const canLink = shared !== 'room' || puzzles.some(p => p.id === game.puzzleId);
+  if (game.room) {
+    const sv = el('div', 'survey'); sv.id = 'survey-box';
+    sv.setAttribute('data-html2canvas-ignore', '');
+    page.appendChild(sv);
+    renderSurvey();
+  }
   const ex = el('div', 'export');
   ex.appendChild(el('h2', '', '結果を書き出す'));
   const exRow = el('div', 'export-row');
-  [['テキストをコピー', exportText], ['Markdownで保存', exportMarkdown], ['PDFで保存', exportPdf], ['画像で保存', exportImage], ['共有リンク', exportLink]]
+  [['テキストをコピー', exportText], ['Markdownで保存', exportMarkdown], ['PDFで保存', exportPdf], ['画像で保存', exportImage], ...(canLink ? [['共有リンク', exportLink]] : [])]
     .forEach(([label, fn]) => { const b = el('button', '', label); b.onclick = () => fn(b); exRow.appendChild(b); });
   ex.appendChild(exRow);
   ex.appendChild(el('p', 'note export-msg', ''));
   page.appendChild(ex);
 
   const row = el('p', 'reveal-actions');
+  if (shared === 'room') {
+    // 部屋の参加者：次の問題はホストが選ぶので、待機画面に戻るだけ
+    const wait = el('button', 'primary', '待機画面へ');
+    wait.onclick = () => { client.revealed = game.puzzleId; renderClient(true); };
+    row.appendChild(wait);
+    page.appendChild(row);
+    return;
+  }
   const again = el('button', '', shared ? 'この問題で遊ぶ' : 'もう一度遊ぶ');
   again.onclick = () => {
+    if (game.room && !shared) {
+      const gid = game.groupId || 'solo', all = loadGames(gid);
+      delete all[game.puzzleId]; saveGames(all, gid);
+      return startRoomPuzzle(game.puzzle);
+    }
     if (shared) { history.replaceState(null, '', location.pathname); return startPuzzle(game.puzzle); }
     const gid = game.groupId || 'solo', all = loadGames(gid);
     delete all[game.puzzleId]; saveGames(all, gid);
@@ -1728,6 +2456,8 @@ function resultText(md) {
     ...answerLines(game.puzzle, answerData, md, game),
     h('対戦の記録'),
     ...game.moves.map((m, i) => (md ? `${i + 1}. ` : `${i + 1}. `) + `${who(m.by)}の${m.kind === 'question' ? '質問' : '解答'}：${m.text} → ${m.reply}（${ptsLabel(m.pts)}）`),
+    ...(game.survey && Object.keys(game.survey).length ? ['', h('みんなの評価'), ...Object.entries(game.survey).map(([n, r]) =>
+      `${md ? '- ' : ''}${n}：${r.skip ? 'スキップ' : `★${r.stars}${r.comment ? `　${r.comment}` : ''}`}`)] : []),
     '', APP_URL,
   ];
   return lines.join('\n');
@@ -1920,12 +2650,14 @@ function renderList() {
     myRepo.repo ? `問題の保存先：データリポジトリ ${myRepo.repo}（${(repoCache[myRepo.repo] || []).length}問）` + (local ? `・未送信 ${local}問` : '') : '',
     repoStatus,
   ].filter(Boolean).join('\n');
+  syncJudge();
   renderGroupBar();
+  ensureRoom();
   const human = judgeMode === 'human';
   document.getElementById('judge-ai').classList.toggle('on', !human);
   document.getElementById('judge-human').classList.toggle('on', human);
   document.getElementById('judge-human-note').classList.toggle('hidden', !human);
-  document.querySelector('.group-bar').classList.toggle('hidden', human);
+  renderRoomPanel();
   const all = loadGames();
   const favs = load('favorites', []);
   const f = loadFilter();
@@ -2025,16 +2757,18 @@ function renderList() {
       }
       c.appendChild(ops);
     }
-    c.onclick = () => judgeMode === 'human' ? openHost(p) : startPuzzle(p);
+    c.onclick = () => roomGroup() ? startRoomPuzzle(p) : judgeMode === 'human' ? openHost(p) : startPuzzle(p);
     box.appendChild(c);
   });
 }
 
 // ---- 人が出題者（AIを使わない遊び方） ----
 // 出題者1人が答えを見て、ほかの人の質問に口頭で答える。アプリは問題文と出題者用の答えを見せるだけ
+// 審判の種類はグループごとに持つ（グループに無ければ従来の 'judge' の値）
 let judgeMode = load('judge', 'ai');   // 'ai' | 'human'
+function syncJudge() { judgeMode = currentGroup().judge || load('judge', 'ai'); }
 function setJudge(mode) {
-  judgeMode = mode; save('judge', mode); renderList();
+  judgeMode = mode; save('judge', mode); updateGroup(currentGroup().id, { judge: mode }); renderList();
   if (mode === 'ai' && !settings.key) openSettings();
 }
 async function openHost(p) {
@@ -2225,6 +2959,13 @@ function loadFilter() {
 }
 function clearFilter() { save('filter', NO_FILTER); document.getElementById('f-q').value = ''; renderList(); }
 function setFilter(change) { save('filter', { ...loadFilter(), ...change }); renderList(); }
+function updateGroup(id, change) {
+  const groups = loadGroups();
+  const i = groups.findIndex(x => x.id === id);
+  if (i < 0) return;
+  groups[i] = { ...groups[i], ...change };
+  save('groups', groups);
+}
 function renderGroupBar() {
   const sel = document.getElementById('group-select');
   sel.textContent = '';
@@ -2238,6 +2979,10 @@ function openGroup(g) {
   document.getElementById('g-name').value = g ? g.name : '';
   document.getElementById('g-players').value = g ? g.players.join('\n') : '';
   document.getElementById('g-npc').checked = g ? g.npc : true;
+  document.getElementById('g-judge').value = (g && g.judge) || judgeMode;
+  document.getElementById('g-chat').checked = !!(g && g.chat);
+  const solo = !!g && g.id === 'solo';
+  ['g-chat-wrap', 'g-chat-note'].forEach(id => document.getElementById(id).classList.toggle('hidden', solo));
   document.getElementById('g-delete').classList.toggle('hidden', !g || g.id === 'solo');
   document.getElementById('g-error').textContent = '';
   document.getElementById('group-modal').classList.remove('hidden');
@@ -2251,7 +2996,11 @@ function saveGroupFromForm() {
   if (players.length > 8) throw new Error('プレイヤーは8人までです');
   const groups = loadGroups();
   const id = editingGroupId || 'g' + Date.now().toString(36);
-  const g = { id, name, players, npc };
+  const old = groups.find(x => x.id === id) || {};
+  const judge = document.getElementById('g-judge').value;
+  const chat = id !== 'solo' && document.getElementById('g-chat').checked;
+  // 部屋の番号はグループごとに固定（招待リンク・QR を使い回せるように）。この端末の人（me）も引き継ぐ
+  const g = { id, name, players, npc, judge, chat, room: old.room || newRoomCode(), ...(old.me ? { me: old.me } : {}) };
   const i = groups.findIndex(x => x.id === id);
   if (i >= 0) groups[i] = g; else groups.push(g);
   save('groups', groups);
@@ -2306,11 +3055,11 @@ async function saveEditedPuzzle(text) {
 }
 
 function show(name) {
-  ['list', 'game', 'reveal'].forEach(n => document.getElementById(`view-${n}`).classList.toggle('hidden', n !== name));
-  document.getElementById('btn-back').classList.toggle('hidden', name === 'list');
+  ['list', 'game', 'reveal', 'join'].forEach(n => document.getElementById(`view-${n}`).classList.toggle('hidden', n !== name));
+  document.getElementById('btn-back').classList.toggle('hidden', name === 'list' || client.active);
   if (name === 'list') document.getElementById('title').textContent = '本当にあった怖いスープ';
 }
-function showList() { game = null; renderList(); show('list'); }
+function showList() { game = null; renderList(); show('list'); roomBroadcast(); }
 
 // ---- 設定 ----
 function openSettings() {
@@ -2511,6 +3260,8 @@ document.getElementById('lib-file').onchange = async e => {
   catch (err) { alert('読み込めませんでした：' + err.message); }
 };
 document.getElementById('btn-back').onclick = showList;
+document.getElementById('parent-cancel').onclick = () => closeParentModal(null);
+document.getElementById('qr-close').onclick = () => document.getElementById('qr-modal').classList.add('hidden');
 document.getElementById('judge-ai').onclick = () => setJudge('ai');
 document.getElementById('judge-human').onclick = () => setJudge('human');
 
@@ -2570,6 +3321,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   try { await loadPuzzles(); }
   catch (e) { document.getElementById('puzzle-list').appendChild(el('p', 'error', '問題を読み込めませんでした。')); return; }
   ['version-list', 'version-settings'].forEach(id => document.getElementById(id).textContent = versionLabel);
+  // 部屋への参加リンク（?room=XXXX）：この端末は参加者として動く（問題集・キーは使わない）
+  const roomParam = new URLSearchParams(location.search).get('room');
+  if (roomParam) { startClient(roomParam.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)); return; }
   const invite = location.hash.match(/^#i=(.+)$/);
   if (invite) {
     try { await openInvite(invite[1]); }
