@@ -125,7 +125,8 @@ h2 > .copy-icon { margin: -4px 0 0 4px; }
 .host-answer .claim { font-size: 12px; color: var(--sub); }
 .group-bar select { flex: 1; min-width: 0; font-size: 16px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .group-bar button { flex: none; padding: 6px 12px; font-size: 14px; }
-#btn-group-new { font-size: 18px; line-height: 1; padding: 7px 12px; }
+#btn-group-edit { font-size: 18px; line-height: 1; padding: 6px 12px; }
+#view-list .list-ops { margin-top: 16px; }
 #g-players { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); margin-top: 4px; }
 .modal label.check { display: flex; gap: 8px; align-items: center; }
 .modal label.check input { width: auto; margin: 0; }
@@ -204,6 +205,8 @@ h2 > .copy-icon { margin: -4px 0 0 4px; }
 .card-tags .tag { border: none; background: none; padding: 0; font-size: 13px; color: var(--sub); cursor: pointer; }
 button.link { border: none; background: none; padding: 0; color: var(--you); text-decoration: underline; font-size: inherit; cursor: pointer; }
 .about h3 { font-size: 15px; margin: 18px 0 6px; }
+.about details { border-top: 1px solid var(--line); padding: 8px 0; }
+.about summary { font-weight: bold; font-size: 15px; cursor: pointer; }
 .about ul { padding-left: 1.2em; margin: 0; }
 .about li { margin: 4px 0; }
 .about-table { border-collapse: collapse; width: 100%; font-size: 14px; }
@@ -260,26 +263,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   </header>
   <div id="join-requests" class="join-requests hidden"></div>
   <main id="view-list">
-    <p class="intro">謎はすべて実話です。AIプレイヤーや友達と順番に「はい／いいえ」で答えられる質問をして、真相を当ててください。<br>
-    重要な事実を見つけると＋1、真相を当てると＋2。外すと−1、真相と関係ない質問や聞き直しも−1です。<br>
-    AIを使わず、誰か1人が出題者になって遊ぶこともできます（APIキー不要）。
-    <button class="link" id="intro-about">くわしい遊び方</button></p>
-    <div class="judge-bar" role="group" aria-label="審判">
-      <span class="group-label">審判</span>
-      <button id="judge-ai">AI が審判</button>
-      <button id="judge-human">人が出題者</button>
-    </div>
-    <p class="note hidden" id="judge-human-note">出題者が1人で答えを見て、ほかの人の質問に「はい／いいえ」で答えます。ほかの人は画面を使わず、口頭で遊びます。APIキーは要りません。<br>
-    各自のスマホから質問したいときは、グループの設定で「チャットで遊ぶ」を入れてください。</p>
+    <p class="intro">謎はすべて実話。質問を重ねて真相を当てる水平思考クイズです。 <button class="link" id="intro-about">遊び方</button></p>
     <div class="group-bar">
-      <span class="group-label">遊ぶ人</span>
-      <select id="group-select" aria-label="遊ぶグループ"></select>
-      <button id="btn-group-edit">編集</button>
-      <button id="btn-group-new" aria-label="グループを追加" title="グループを追加">＋</button>
+      <select id="group-select" aria-label="遊ぶ人と審判"></select>
+      <button id="btn-group-edit" aria-label="遊ぶ人と審判の設定" title="遊ぶ人と審判の設定">⚙</button>
     </div>
     <div id="room-panel" class="room-panel hidden"></div>
-    <div class="list-ops"><button id="btn-add-puzzle" class="primary">＋ 問題を作る・追加</button>
-    <button id="btn-library">問題集の保存・共有</button></div>
     <div class="search-row">
       <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
       <button id="btn-filter-toggle" aria-expanded="false">絞り込み</button>
@@ -296,6 +285,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="tag-chips"><button id="btn-fav-only" class="chip">☆ お気に入り</button><span id="tag-chips"></span></div>
     <p class="filter-count" id="filter-count"><span id="filter-count-text"></span><button id="btn-filter-clear" class="link hidden">絞り込みを解除</button></p>
     <div id="puzzle-list"></div>
+    <div class="list-ops"><button id="btn-add-puzzle">＋ 問題を作る・追加</button>
+    <button id="btn-library">問題集の保存・共有</button></div>
     <p class="note" id="repo-status"></p>
     <p class="version" id="version-list"></p>
   </main>
@@ -380,6 +371,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="group-modal" class="overlay hidden">
   <div class="modal">
     <h2 id="g-title">グループ</h2>
+    <p class="note">遊ぶ人と審判（AI／人）をここで決めます。</p>
     <p class="note">一緒に遊ぶメンバーを登録します。1台の端末を順番に回して遊びます。<br>
     遊んだ・対戦中といった進み具合はグループごとに保存されるので、後日続きから遊べます。</p>
     <label>グループ名
@@ -406,30 +398,47 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
 <div id="about" class="overlay hidden">
   <div class="modal about">
-    <h2>本当にあった怖いスープとは</h2>
-    <p>実際にあった出来事の記録をもとにした、水平思考クイズ（ウミガメのスープ）です。不思議な状況だけが示されるので、「はい／いいえ」で答えられる質問を重ねて、なぜそうなったのかという真相を当てます。</p>
-    <p>出題はすべて、事故調査報告・航空安全報告・博物館の解説など、公開されている記録から作っています。答え合わせでは真相と出典が見られます。</p>
-
-    <h3>遊び方</h3>
+    <h2>遊び方</h2>
+    <p>実際の記録をもとにした水平思考クイズです。不思議な状況を手がかりに、「はい／いいえ」で答えられる質問を重ねて、真相を当てます。</p>
     <ul>
-      <li>プレイヤーが順番に1手ずつ、質問するか解答します。<b>審判（AI）</b> が記録をもとに答えます</li>
-      <li>最初は「ひとりで」（あなたと <b>AIプレイヤー</b> の対戦）になっています</li>
-      <li>だれかが真相を当てるか、「降参」すると終わり。得点がいちばん多い人の勝ちです</li>
-      <li>手数に上限はありません。進行は自動で保存されるので、途中でやめても続きから遊べます</li>
-      <li>入力を間違えたときは「1手戻す」で、最後の質問を取り消せます（得点も元に戻ります）</li>
-      <li>行き詰まったら「ヒント」。みんなが同意したら1つずつ開きます。全員（AIプレイヤーも）に見え、得点は変わらず手番も使いません</li>
+      <li>順番に1手ずつ、質問か解答をします。審判が記録をもとに答えます</li>
+      <li>だれかが真相を当てるか「降参」で終わり。得点がいちばん多い人の勝ちです</li>
+      <li>行き詰まったら「ヒント」（得点は変わりません）。打ち間違えたら「1手戻す」</li>
+      <li>遊ぶ人と審判（AI／人）は、一覧の上の ⚙ で決めます</li>
     </ul>
+    <table class="about-table">
+      <tr><td>重要な事実を見つけた</td><td>＋1</td></tr>
+      <tr><td>真相を当てた</td><td>＋2</td></tr>
+      <tr><td>解答が外れた</td><td>−1</td></tr>
+      <tr><td>「関係ありません」「重要ではありません」「既出です」</td><td>−1</td></tr>
+    </table>
 
-    <h3>人が出題者になって遊ぶ（AIなし）</h3>
-    <ul>
-      <li>一覧の上の「審判」で「人が出題者」を選ぶと、AIを使わずに遊べます。APIキーも要りません</li>
-      <li>出題者を1人決めます。問題を開いて問題文を読み上げる（または画面を見せる）と、ほかの人は口頭で「はい／いいえ」で答えられる質問をします</li>
-      <li>出題者は「出題者用：答えを見る」で、真相・正解の条件・質問に答えるための資料・ヒントを見ながら答えます。得点を付けるかどうかは自由です</li>
-    </ul>
-
-    <h3>問題のもと（出典）</h3>
-    <p>問題は、次のような公開された記録から作っています。資料に書かれた事実だけを使い、書かれていないことは足していません。問題文の最後の「（出典：…）」で、どの記録から作った問題かが分かります（号数や記事の題名はヒントになるので、答え合わせの画面で見られます）。</p>
-    <ul>
+    <details>
+      <summary>友達と遊ぶ</summary>
+      <ul>
+        <li><b>1台を回す</b>：⚙ でグループ名とメンバーを登録し、「〇〇の番です」の順に端末を回します。進み具合はグループごとに保存されます</li>
+        <li><b>人が出題者</b>：審判を「人が出題者」にすると AI なし・キーなしで遊べます。出題者が答えを見ながら、口頭の質問に答えます</li>
+        <li><b>チャットで遊ぶ</b>：⚙ で入れると、この端末がホストになり、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要・入るにはホストの許可が要る）。人が出題者のときは問題ごとに親を選び、答えは親にだけ見えます</li>
+        <li>問題が終わると全員に星とコメントのアンケートが出ます（スキップ可）。評価は問題集のデータリポジトリに保存されます</li>
+        <li>「問題と経過を共有」で、問題文とここまでの経過を LINE などに貼れます（答えは含まれません）</li>
+      </ul>
+    </details>
+    <details>
+      <summary>問題を作る・共有する</summary>
+      <ul>
+        <li>「＋ 問題を作る・追加」で、Claude に新しい問題を作ってもらえます（Claude のアカウントが必要）</li>
+        <li>「問題集の保存・共有」で、問題集を自分の GitHub に保存し、招待リンクで友達に渡せます。友達に問題を追加してもらえば、答えを知らない問題を遊べます</li>
+        <li>1問だけなら、各問題の「共有」からリンクで渡せます</li>
+      </ul>
+    </details>
+    <details>
+      <summary>審判の答え方</summary>
+      <p class="note">AI の審判は「はい／いいえ／部分的にはい／どちらとも言えない／重要ではありません／関係ありません／資料では不明／既出です」のどれかで答えます。的外れな質問や聞き直しは減点されます。人が出題者のチャットでは、親が「はい／いいえ／ややそう／ややそうではない／どちらともいえない／分からない／その他」で答えます。</p>
+    </details>
+    <details>
+      <summary>問題のもと（出典）</summary>
+      <p class="note">公開された記録の、書かれた事実だけで作っています。どの記録から作ったかは問題文の最後に、記事名などは答え合わせの画面に出ます。</p>
+      <ul>
       <li><b>NASA ASRS CALLBACK</b>：アメリカ航空宇宙局（NASA）の航空安全報告制度の月報。操縦士・管制官・客室乗務員などが、ひやりとした出来事を匿名で報告したもの（<a href="https://asrs.arc.nasa.gov/publications/callback.html" target="_blank" rel="noopener">サイト</a>）</li>
       <li><b>NTSB</b>：アメリカ国家運輸安全委員会の事故調査。飛行機・船・鉄道・バスなどの事故の原因を調べた報告（<a href="https://www.ntsb.gov/investigations/" target="_blank" rel="noopener">サイト</a>）</li>
       <li><b>Science Museum Group のブログ</b>：ロンドンの科学博物館（Science Museum）とマンチェスターの科学産業博物館（Science and Industry Museum）の、収蔵品や調査についての記事（<a href="https://blog.sciencemuseum.org.uk/" target="_blank" rel="noopener">Science Museum</a>・<a href="https://blog.scienceandindustrymuseum.org.uk/" target="_blank" rel="noopener">Science and Industry Museum</a>）</li>
@@ -439,41 +448,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <li><b>CSB</b>：アメリカ化学安全委員会の、工場などの化学事故の調査（<a href="https://www.csb.gov/investigations/" target="_blank" rel="noopener">サイト</a>）</li>
       <li><b>失敗知識データベース</b>：科学技術振興機構（JST）が作った、日本や海外の事故・失敗の事例集（<a href="https://www.shippai.org/fkd/" target="_blank" rel="noopener">サイト</a>）</li>
     </ul>
-    <p class="note">ASRS の報告は、体験した本人の申告です。審判は「資料にそう書かれている」ことを根拠に答えます。</p>
-
-    <h3>みんなで遊ぶ</h3>
-    <ul>
-      <li>問題一覧の上の「＋ グループ」で、グループ名とメンバーを登録します。1台の端末を、表示される「〇〇の番です」の順に回して遊びます</li>
-      <li>AIプレイヤーを入れるかどうかも選べます。入れなくても遊べます</li>
-      <li>グループはいくつでも登録でき、一覧の上で切り替えられます。遊んだ・対戦中といった進み具合はグループごとに保存されるので、後日そのグループで続きから遊べます</li>
-      <li><b>チャットで遊ぶ</b>：グループの設定で入れると、この端末がホストになって部屋を開き、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要）。問題はホストの問題集から選び、AI が審判ならホストのキーで判定します。人が出題者のときは問題ごとに親を選び、答えは親の端末にだけ出ます。親は「はい／いいえ／ややそう／ややそうではない／どちらともいえない／分からない／その他（自由入力）」で答えます。部屋に入るにはホストの許可が要ります（一度許可した端末は次から許可なしで入れます）。問題が終わったら全員に星とコメントのアンケートが出ます（スキップ可）。評価は、その問題が入っている問題集（データリポジトリ）に取りまとめて保存します（ホストか、参加者のうち書き込める人が書きます。誰も書けないときはホストの端末にだけ残ります）。結果の書き出しは参加者もできます</li>
-      <li>対戦画面の「問題と経過を共有」で、問題文とこれまでの質問・回答・得点・次の番を LINE グループなどに貼れます（答えは含まれません）</li>
-    </ul>
-
-    <h3>得点</h3>
-    <table class="about-table">
-      <tr><td>重要な事実を見つけた</td><td>＋1</td></tr>
-      <tr><td>真相を当てた</td><td>＋2</td></tr>
-      <tr><td>解答が外れた</td><td>−1</td></tr>
-      <tr><td>「関係ありません」「重要ではありません」「既出です」</td><td>−1</td></tr>
-      <tr><td>それ以外の答え</td><td>0</td></tr>
-    </table>
-    <p class="note">審判の答えは「はい／いいえ／部分的にはい／どちらとも言えない／重要ではありません／関係ありません／資料では不明／既出です」のどれかです。的外れな質問や聞き直しは減点されるので、よく考えて質問してください。</p>
-
-    <h3>問題を増やす・友達と遊ぶ</h3>
-    <ul>
-      <li>一覧の上の「＋ 問題を作る・追加」で、Claude に新しい問題を作ってもらえます（Claude のアカウントが必要）</li>
-      <li>「問題集の保存・共有」で、自分の問題集を GitHub に保存し、招待リンクで友達に渡せます。友達に問題を追加してもらえば、答えを知らない問題を遊べます</li>
-      <li>1問だけなら、各問題の「共有」からリンクで渡せます</li>
-    </ul>
-
-    <h3>必要なもの</h3>
-    <ul>
-      <li>AI が審判のとき：Google の Gemini APIキー（無料）。作り方は「設定」に載っています</li>
-      <li>任意：Groq の APIキー（無料。Gemini の無料枠を使い切ったときの予備）</li>
-      <li>人が出題者のとき：キーは要りません。この端末（ブラウザ）だけで遊べます</li>
-    </ul>
-    <p class="note">キーや進行状況は、この端末のブラウザ内にだけ保存されます。質問の内容は Google（と、入れた場合は Groq）の AI に送られます。</p>
+    </details>
+    <details>
+      <summary>必要なもの・データの保存先</summary>
+      <ul>
+        <li>AI が審判のとき：Google の Gemini APIキー（無料）。作り方は「設定」に載っています。予備に Groq のキー（無料）も入れられます</li>
+        <li>人が出題者のとき・チャットの参加者：キーは要りません</li>
+        <li>キーや進行状況は、この端末のブラウザ内にだけ保存されます。質問の内容は Google（と、入れた場合は Groq）の AI に送られます</li>
+      </ul>
+    </details>
 
     <div class="row">
       <button id="about-close" class="primary">閉じる</button>
@@ -588,7 +571,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="settings" class="overlay hidden">
   <div class="modal">
     <h2>セットアップ</h2>
-    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。AIと遊ぶには Gemini のAPIキーが1つ必要です（一覧の「審判」で「人が出題者」を選べば、キーなしで遊べます）。<br>
+    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。AIと遊ぶには Gemini のAPIキーが1つ必要です（一覧の上の ⚙ で審判を「人が出題者」にすれば、キーなしで遊べます）。<br>
     回数が足りないときの予備として、Groq のキーも任意で追加できます。<br>
     キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先は Google（と、入れた場合は Groq）の API だけです。</p>
 
@@ -671,7 +654,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.45';
+const APP_VERSION = 'v0.1.46';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1146,7 +1129,7 @@ async function openInvite(code) {
   const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
   const intro = settings.key || settings.groqKey ? '' :
     '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIや友達と順番に質問しながら解く水平思考クイズです。\n' +
-    'AIと遊ぶには Google の Gemini APIキー（無料）が1つ要ります。誰か1人が出題者になって遊ぶなら、キーは要りません（一覧の「審判」で切り替え）。\n\n';
+    'AIと遊ぶには Google の Gemini APIキー（無料）が1つ要ります。誰か1人が出題者になって遊ぶなら、キーは要りません（一覧の上の ⚙ で切り替え）。\n\n';
   if (!confirm(`${intro}「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
   collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
@@ -2653,10 +2636,6 @@ function renderList() {
   syncJudge();
   renderGroupBar();
   ensureRoom();
-  const human = judgeMode === 'human';
-  document.getElementById('judge-ai').classList.toggle('on', !human);
-  document.getElementById('judge-human').classList.toggle('on', human);
-  document.getElementById('judge-human-note').classList.toggle('hidden', !human);
   renderRoomPanel();
   const all = loadGames();
   const favs = load('favorites', []);
@@ -2767,10 +2746,6 @@ function renderList() {
 // 審判の種類はグループごとに持つ（グループに無ければ従来の 'judge' の値）
 let judgeMode = load('judge', 'ai');   // 'ai' | 'human'
 function syncJudge() { judgeMode = currentGroup().judge || load('judge', 'ai'); }
-function setJudge(mode) {
-  judgeMode = mode; save('judge', mode); updateGroup(currentGroup().id, { judge: mode }); renderList();
-  if (mode === 'ai' && !settings.key) openSettings();
-}
 async function openHost(p) {
   let ans;
   try { ans = await loadAnswer(p.id); } catch (e) { alert('答えを読み込めませんでした。'); return; }
@@ -2969,7 +2944,12 @@ function updateGroup(id, change) {
 function renderGroupBar() {
   const sel = document.getElementById('group-select');
   sel.textContent = '';
-  loadGroups().forEach(g => sel.appendChild(new Option(`${g.name}（${g.players.join('・')}${g.npc ? '＋AI' : ''}）`, g.id)));
+  loadGroups().forEach(g => {
+    const judge = (g.judge || load('judge', 'ai')) === 'human' ? '人が出題者' : 'AIが審判';
+    const who = g.id === 'solo' ? '' : `（${g.players.length}人${g.npc && judge === 'AIが審判' ? '＋AI' : ''}）`;
+    sel.appendChild(new Option(`${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
+  });
+  sel.appendChild(new Option('＋ 新しいグループ', '__new'));
   sel.value = currentGroup().id;
 }
 let editingGroupId = null;
@@ -3262,8 +3242,6 @@ document.getElementById('lib-file').onchange = async e => {
 document.getElementById('btn-back').onclick = showList;
 document.getElementById('parent-cancel').onclick = () => closeParentModal(null);
 document.getElementById('qr-close').onclick = () => document.getElementById('qr-modal').classList.add('hidden');
-document.getElementById('judge-ai').onclick = () => setJudge('ai');
-document.getElementById('judge-human').onclick = () => setJudge('human');
 
 document.getElementById('btn-ask').onclick = () => playerMove('question');
 document.getElementById('btn-answer').onclick = () => playerMove('answer');
@@ -3271,12 +3249,17 @@ document.getElementById('btn-giveup').onclick = giveUp;
 document.getElementById('btn-undo').onclick = undoMove;
 document.getElementById('btn-hint').onclick = openHint;
 document.getElementById('btn-share-progress').onclick = shareProgress;
-document.getElementById('group-select').onchange = e => { save('group', e.target.value); renderList(); };
-document.getElementById('btn-group-new').onclick = () => openGroup(null);
+document.getElementById('group-select').onchange = e => {
+  if (e.target.value === '__new') { e.target.value = currentGroup().id; openGroup(null); return; }
+  save('group', e.target.value); renderList();
+};
 document.getElementById('btn-group-edit').onclick = () => openGroup(currentGroup());
 document.getElementById('g-cancel').onclick = () => document.getElementById('group-modal').classList.add('hidden');
 document.getElementById('g-save').onclick = () => {
-  try { saveGroupFromForm(); document.getElementById('group-modal').classList.add('hidden'); renderList(); }
+  try {
+    saveGroupFromForm(); document.getElementById('group-modal').classList.add('hidden'); renderList();
+    if (judgeMode === 'ai' && !settings.key && !settings.groqKey) openSettings();
+  }
   catch (e) { document.getElementById('g-error').textContent = e.message; }
 };
 document.getElementById('g-delete').onclick = () => {
