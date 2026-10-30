@@ -95,6 +95,11 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16
 .survey .stars button { font-size: 26px; line-height: 1; padding: 2px 4px; border: none; background: none; color: #d9a400; cursor: pointer; }
 .survey textarea { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
 .survey .answers li { margin: 4px 0; }
+.rv-badge { border: none; background: none; padding: 0 2px; color: #d9a400; font-size: 13px; cursor: pointer; }
+.rv-avg { font-size: 18px; color: #d9a400; margin: 4px 0 10px; }
+.rv-entry { border-top: 1px solid var(--line); padding: 8px 0; font-size: 14px; }
+.rv-entry > div:not(.note) { color: #d9a400; }
+.rv-comment { color: var(--ink); }
 .qr-box { display: flex; justify-content: center; margin: 12px 0; }
 .qr-box img { width: 240px; height: 240px; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 8px; }
 .join { padding: 16px; overflow-y: auto; }
@@ -277,6 +282,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <div class="ms" id="f-author"></div>
       <div class="ms" id="f-diff"></div>
       <div class="ms" id="f-state"></div>
+      <div class="ms" id="f-rate"></div>
       <div class="ms" id="f-src"></div>
       <select id="f-fatal" aria-label="人が亡くなった出来事">
         <option value="">死者あり：除く</option><option value="show">死者あり：表示する</option>
@@ -419,7 +425,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
         <li><b>1台を回す</b>：⚙ でグループ名とメンバーを登録し、「〇〇の番です」の順に端末を回します。進み具合はグループごとに保存されます</li>
         <li><b>人が出題者</b>：審判を「人が出題者」にすると AI なし・キーなしで遊べます。出題者が答えを見ながら、口頭の質問に答えます</li>
         <li><b>チャットで遊ぶ</b>：⚙ で入れると、この端末がホストになり、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要・入るにはホストの許可が要る）。人が出題者のときは問題ごとに親を選び、答えは親にだけ見えます</li>
-        <li>問題が終わると全員に星とコメントのアンケートが出ます（スキップ可）。評価は問題集のデータリポジトリに保存されます</li>
+        <li>問題が終わると全員に星とコメントのアンケートが出ます（スキップ可）。評価は問題集のデータリポジトリに保存され、一覧の「★4.5（3）」から評価とコメントを見られます。「絞り込み」の「評価」でも探せます</li>
         <li>「問題と経過を共有」で、問題文とここまでの経過を LINE などに貼れます（答えは含まれません）</li>
       </ul>
     </details>
@@ -461,6 +467,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <div class="row">
       <button id="about-close" class="primary">閉じる</button>
     </div>
+  </div>
+</div>
+
+<div id="reviews-modal" class="overlay hidden">
+  <div class="modal">
+    <h2 id="reviews-title">評価</h2>
+    <div id="reviews-body"></div>
+    <div class="row"><button id="reviews-close" class="primary">閉じる</button></div>
   </div>
 </div>
 
@@ -654,7 +668,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.47';
+const APP_VERSION = 'v0.1.48';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -936,6 +950,20 @@ function normalizeRepoSlug(input) {
 }
 // puzzles/ を読む。sha はファイル単位の GET ではなく一覧から取る（1MB 超で GET が 403 になるため）
 let shaCache = {};   // 'owner/repo' → { id: sha }
+// reviews/<id>.json（遊んだ回ごとの評価）を読む。フォルダが無ければ空
+let reviewCache = load('review-cache', {});   // { 'owner/repo': { puzzleId: [entry, …] } }
+async function fetchRepoReviews(repo, token) {
+  const res = await fetch(ghUrl(repo, 'reviews'), { headers: ghHeaders(token), cache: 'no-store' });
+  if (res.status === 404) return {};
+  if (!res.ok) throw new Error(ghErrorText(res.status));
+  const out = {};
+  await Promise.all((await res.json()).filter(f => f.type === 'file' && f.name.endsWith('.json')).map(async f => {
+    const r = await fetch(ghUrl(repo, f.path), { headers: ghHeaders(token, true), cache: 'no-store' });
+    if (!r.ok) return;
+    try { const list = JSON.parse(await r.text()); if (Array.isArray(list)) out[f.name.replace(/\.json$/, '')] = list; } catch (e) { /* 壊れたファイルは飛ばす */ }
+  }));
+  return out;
+}
 async function fetchRepoPuzzles(repo, token) {
   const nameDone = fetchRepoName(repo, token);
   const res = await fetch(ghUrl(repo, 'puzzles'), { headers: ghHeaders(token), cache: 'no-store' });
@@ -1110,6 +1138,11 @@ async function syncRepos() {
     catch (e) { msgs.push(`「${c.name}」を読み込めませんでした：${e.message}`); }
   }));
   save('repo-cache', repoCache);
+  // 評価（失敗しても遊ぶのには困らないので、知らせない）
+  const reviewSrc = [...(myRepo.repo && myRepo.pat ? [[myRepo.repo, myRepo.pat]] : []), ...collections.map(c => [c.repo, c.token])];
+  await Promise.all(reviewSrc.map(async ([repo, token]) => { try { reviewCache[repo] = await fetchRepoReviews(repo, token); } catch (e) { /* 控えのまま */ } }));
+  Object.keys(reviewCache).forEach(r => { if (!reviewSrc.some(([x]) => x === r)) delete reviewCache[r]; });
+  save('review-cache', reviewCache);
   rebuildPuzzles();
   repoStatus = msgs.join('\n');
   if (!document.getElementById('view-list').classList.contains('hidden')) renderList();
@@ -1397,9 +1430,9 @@ async function rivalMove(game, onRetry) {
 }
 
 // ---- グループ（1台の端末を回して遊ぶメンバー。進み具合はグループごとに保存） ----
-// 最初からある2つ：ひとりで AI が審判（AIプレイヤーあり）／ひとりで人が出題者（AIプレイヤーなし）。消せない
+// 最初からある2つ：ひとりで AI が審判（AIプレイヤーあり）／問題を閲覧する（AIなし。問題文と答えを見るだけ）。消せない
 const SOLO = { id: 'solo', name: 'ひとりで', players: ['あなた'], npc: true, judge: 'ai' };
-const SOLO_HUMAN = { id: 'solo-human', name: 'ひとりで', players: ['あなた'], npc: false, judge: 'human' };
+const SOLO_HUMAN = { id: 'solo-human', name: '問題を閲覧する', players: ['あなた'], npc: false, judge: 'human' };
 const isBuiltinGroup = id => id === 'solo' || id === 'solo-human';
 function loadGroups() {
   const g = load('groups', []);
@@ -1845,6 +1878,9 @@ async function ghUpsertReview(repo, token, puzzleId, entry) {
   let res = await attempt();
   if (res.status === 409 || res.status === 422) res = await attempt();
   if (!res.ok) throw new Error(ghErrorText(res.status));
+  const byRepo = reviewCache[repo] || (reviewCache[repo] = {});
+  byRepo[puzzleId] = [...(byRepo[puzzleId] || []).filter(x => x.id !== entry.id), entry];
+  save('review-cache', reviewCache);
 }
 function surveyNames(g = game) { return [...g.players.filter(p => !p.ai).map(p => p.name), ...(g.parent ? [g.parent] : [])]; }
 let surveyStars = 0;
@@ -2632,6 +2668,50 @@ async function openSharedResult(code) {
   return true;
 }
 
+function collectReviews() {
+  const by = {};
+  const add = (pid, e) => { const m = by[pid] || (by[pid] = new Map()); if (!m.has(e.id)) m.set(e.id, e); };
+  Object.values(reviewCache).forEach(r => Object.entries(r).forEach(([pid, list]) => list.forEach(e => e && e.id && e.ratings && add(pid, e))));
+  loadGroups().forEach(g => Object.values(loadGames(g.id)).forEach(x => { if (x && x.room && x.survey) { const e = reviewEntry(x); if (Object.keys(e.ratings).length) add(x.puzzleId, e); } }));
+  const out = {};
+  Object.entries(by).forEach(([pid, m]) => {
+    const entries = [...m.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const stars = entries.flatMap(e => Object.values(e.ratings).map(r => Number(r.stars)).filter(n => n >= 1 && n <= 5));
+    if (stars.length) out[pid] = { entries, count: stars.length, avg: stars.reduce((a, n) => a + n, 0) / stars.length };
+  });
+  return out;
+}
+function starText(n) { const k = Math.round(n); return '★'.repeat(k) + '☆'.repeat(5 - k); }
+// 評価とコメントの一覧。コメントは答えに触れることがあるので、まだ解いていない問題では押してから出す
+function openReviews(p, rv, done) {
+  const box = document.getElementById('reviews-body');
+  box.textContent = '';
+  document.getElementById('reviews-title').textContent = `「${p.title}」の評価`;
+  box.appendChild(el('p', 'rv-avg', `${starText(rv.avg)} ${rv.avg.toFixed(1)}（${rv.count}件）`));
+  const list = el('div');
+  const draw = () => {
+    list.textContent = '';
+    rv.entries.forEach(e => {
+      const sec = el('div', 'rv-entry');
+      sec.appendChild(el('div', 'note', `${e.date || ''}・${(e.players || []).join('・')}`));
+      Object.entries(e.ratings).forEach(([n, r]) => {
+        const line = el('div', '', `${n}：${starText(r.stars)}`);
+        if (r.comment) line.appendChild(el('span', 'rv-comment', `　${r.comment}`));
+        sec.appendChild(line);
+      });
+      list.appendChild(sec);
+    });
+  };
+  if (done) draw();
+  else {
+    const btn = el('button', '', 'コメントも見る（答えに触れていることがあります）');
+    btn.onclick = () => { btn.remove(); draw(); };
+    box.appendChild(el('p', 'note', 'まだ解いていない問題です。'));
+    box.appendChild(btn);
+  }
+  box.appendChild(list);
+  document.getElementById('reviews-modal').classList.remove('hidden');
+}
 function renderList() {
   const box = document.getElementById('puzzle-list');
   box.textContent = '';
@@ -2664,6 +2744,9 @@ function renderList() {
   renderMultiSelect('f-author', '作者', authors.map(a => [a, a]), f, 'author');
   renderMultiSelect('f-diff', '難易度', ['初級', '中級', '上級'].map(d => [d, d]), f, 'diff');
   renderMultiSelect('f-state', '状態', [['new', '未プレイ'], ['playing', '対戦中'], ['done', '済']], f, 'state');
+  const reviews = collectReviews();
+  const rateOf = p => reviews[p.id] ? String(Math.round(reviews[p.id].avg)) : 'none';
+  renderMultiSelect('f-rate', '評価', [['5', '★5'], ['4', '★4'], ['3', '★3'], ['2', '★2'], ['1', '★1'], ['none', '評価なし']], f, 'rate');
   renderMultiSelect('f-src', '出典', [...new Set(puzzles.map(siteOf))].sort().map(s => [s, s]), f, 'src');
   document.getElementById('f-fatal').value = f.fatal;
   const q = document.getElementById('f-q');
@@ -2674,7 +2757,7 @@ function renderList() {
   favBtn.textContent = f.fav ? '★ お気に入り' : '☆ お気に入り';
   favBtn.classList.toggle('on', f.fav);
   // 作者・難易度・状態は「絞り込み」で開く。選んでいる数をボタンに出し、選んでいれば開いておく
-  const picked = [f.author.length, f.diff.length, f.state.length, f.src.length, f.fatal === 'show'].filter(Boolean).length;
+  const picked = [f.author.length, f.diff.length, f.state.length, f.rate.length, f.src.length, f.fatal === 'show'].filter(Boolean).length;
   if (filterOpen === null) filterOpen = picked > 0;
   document.getElementById('filter-panel').classList.toggle('hidden', !filterOpen);
   const ft = document.getElementById('btn-filter-toggle');
@@ -2686,7 +2769,7 @@ function renderList() {
   const shown = puzzles.filter(p =>
     (!f.tag.length || (p.tags || []).some(t => f.tag.includes(t))) && any(f.diff, p.difficulty) &&
     any(f.state, stateOf(p)) && (!f.fav || favs.includes(p.id)) &&
-    any(f.author, authorOf(p)) && any(f.src, siteOf(p)) && (f.fatal === 'show' || !p.fatal) &&
+    any(f.author, authorOf(p)) && any(f.src, siteOf(p)) && any(f.rate, rateOf(p)) && (f.fatal === 'show' || !p.fatal) &&
     words.every(w => textOf(p).includes(w)));
   const active = f.tag.length || picked || f.fav || words.length;
   document.getElementById('btn-filter-clear').classList.toggle('hidden', !active);
@@ -2709,6 +2792,13 @@ function renderList() {
     meta.appendChild(el('span', 'badge', p.difficulty));
     meta.appendChild(el('span', 'badge', p.puzzle_type));
     if (p.fatal) meta.appendChild(el('span', 'badge', '死者あり'));
+    const rv = reviews[p.id];
+    if (rv) {
+      const rb = el('button', 'rv-badge', `★${rv.avg.toFixed(1)}（${rv.count}）`);
+      rb.setAttribute('aria-label', '評価とコメントを見る');
+      rb.onclick = e => { e.stopPropagation(); openReviews(p, rv, stateOf(p) === 'done'); };
+      meta.appendChild(rb);
+    }
     const g = all[p.id];
     if (g) meta.appendChild(el('span', g.finished ? 'state done' : 'state playing', g.finished ? `済（${normalizeGame(g).scores.join('対')}）` : `対戦中・${g.moves.length}手`));
     c.appendChild(meta);
@@ -2868,8 +2958,8 @@ function answerLines(p, ans, md, g) {
   ];
 }
 
-const NO_FILTER = { tag: [], diff: [], state: [], fav: false, author: [], src: [], fatal: '', q: '' };
-const MULTI_KEYS = ['tag', 'diff', 'state', 'author', 'src'];
+const NO_FILTER = { tag: [], diff: [], state: [], rate: [], fav: false, author: [], src: [], fatal: '', q: '' };
+const MULTI_KEYS = ['tag', 'diff', 'state', 'rate', 'author', 'src'];
 let filterOpen = null;   // null：未操作（作者・難易度・状態・出典・死者ありを選んでいれば開いて表示）
 let msOpen = null;       // 開いている複数選択の id
 // 複数選択（ボタンを押すとチェックボックスの一覧が開く）。f[key] は選んだ値の配列
@@ -2954,7 +3044,7 @@ function renderGroupBar() {
   loadGroups().forEach(g => {
     const judge = (g.judge || load('judge', 'ai')) === 'human' ? '人が出題者' : 'AIが審判';
     const who = isBuiltinGroup(g.id) ? '' : `（${g.players.length}人${g.npc && judge === 'AIが審判' ? '＋AI' : ''}）`;
-    sel.appendChild(new Option(`${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
+    sel.appendChild(new Option(g.id === 'solo-human' ? SOLO_HUMAN.name : `${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
   });
   sel.appendChild(new Option('＋ 新しいグループ', '__new'));
   sel.value = currentGroup().id;
@@ -2968,7 +3058,7 @@ function openGroup(g) {
   // 新しいグループは、人が出題者・AIプレイヤーなしから始める
   document.getElementById('g-npc').checked = g ? g.npc : false;
   document.getElementById('g-judge').value = g ? g.judge || judgeMode : 'human';
-  document.getElementById('g-chat').checked = !!(g && g.chat);
+  document.getElementById('g-chat').checked = g ? !!g.chat : true;   // 新しいグループはチャットで遊ぶから始める
   const solo = !!g && isBuiltinGroup(g.id);
   ['g-chat-wrap', 'g-chat-note'].forEach(id => document.getElementById(id).classList.toggle('hidden', solo));
   document.getElementById('g-delete').classList.toggle('hidden', !g || solo);
@@ -3249,6 +3339,7 @@ document.getElementById('lib-file').onchange = async e => {
 };
 document.getElementById('btn-back').onclick = showList;
 document.getElementById('parent-cancel').onclick = () => closeParentModal(null);
+document.getElementById('reviews-close').onclick = () => document.getElementById('reviews-modal').classList.add('hidden');
 document.getElementById('qr-close').onclick = () => document.getElementById('qr-modal').classList.add('hidden');
 
 document.getElementById('btn-ask').onclick = () => playerMove('question');
