@@ -309,6 +309,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
           <button id="btn-share-progress">問題と経過を共有</button>
           <button id="btn-hint">ヒント</button>
           <button id="btn-undo" class="link">1手戻す</button>
+          <button id="btn-skip" class="link hidden"></button>
         </div>
       </div>
       <div class="history" id="history"></div>
@@ -668,7 +669,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.48';
+const APP_VERSION = 'v0.1.49';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1279,7 +1280,8 @@ function noteFallback(role, text) {
 
 async function callAI(role, system, prompt, temperature) {
   const groq = !!settings.groqKey;
-  const useGroqFirst = groq && (settings.groqUse === 'all' || (settings.groqUse === 'rival' && role === 'rival'));
+  // Gemini のキーが無く Groq のキーだけあるときは、使い方の設定に関係なく Groq を使う
+  const useGroqFirst = groq && (!settings.key || settings.groqUse === 'all' || (settings.groqUse === 'rival' && role === 'rival'));
   if (useGroqFirst) return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
   const first = role === 'rival' ? settings.rivalModel : settings.model;
   // 設定したモデルから始め、上限に当たったらそれより軽いモデルへ順に下げる
@@ -1515,22 +1517,29 @@ async function playerMove(kind) {
   if (!text) return;
   const by = game.turn;
   if (game.room && game.judge === 'human') { input.value = ''; return hostMove(by, kind, text); }
+  const g = game;
   setBusy(true, `審判が${pName(by)}の${kind === 'question' ? '質問' : '解答'}を判定しています…`);
   try {
     const ok = await applyMove(by, kind, text);
     if (ok) input.value = '';
   } catch (e) {
-    showError(e);
+    if (game === g) showError(e);
   } finally {
     setBusy(false);
   }
-  if (!game.finished && isAI(game.turn)) runRival();
+  // 判定を待つ間に別の問題を開いていたら、そちらの対戦を進める
+  if (game && !game.finished && isAI(game.turn)) runRival();
 }
 
 // 1手を判定して記録する。質問か解答か曖昧なときは減点前に確認する（プレイヤーのみ）
 async function applyMove(by, kind, text) {
+  // 判定を待つ間に一覧へ戻って別の問題を開いていたら、結果は捨てる（別の対戦の記録に入れない）。
+  // 待つ間に部屋へ人が加わると番号がずれるので、手を打った人の番号は判定のあとで取り直す
+  const g = game, who = game.players[by];
   if (kind === 'question') {
     const r = await askGM('question', text, game, answerData);
+    if (game !== g) return false;
+    by = g.players.indexOf(who);
     if (r.answerLike) {
       if (!isAI(by)) {
         // 部屋で別の端末の人の手なら、その人の端末で確かめてもらう（送り直されたら解答として判定）
@@ -1546,6 +1555,8 @@ async function applyMove(by, kind, text) {
     game.moves.push({ by, kind, text, reply: r.answer, pts, discovery: r.discovery });
   } else {
     const r = await askGM('answer', text, game, answerData);
+    if (game !== g) return false;
+    by = g.players.indexOf(who);
     const pts = r.correct ? 2 : -1;
     game.scores[by] += pts;
     game.moves.push({ by, kind, text, reply: r.correct ? '正解' : '不正解', pts, reason: r.reason });
@@ -1554,23 +1565,32 @@ async function applyMove(by, kind, text) {
   game.turn = (by + 1) % game.players.length;
   saveGame();
   renderGame();
-  if (game.finished) setTimeout(showReveal, 900);
+  if (game.finished) revealSoon();
   return true;
+}
+// 少し間をおいて答え合わせを出す。その間に画面を離れていたら出さない
+function revealSoon() {
+  const g = game;
+  setTimeout(() => { if (game === g && !document.getElementById('view-game').classList.contains('hidden')) showReveal(); }, 900);
 }
 
 async function runRival() {
   if (busy || game.finished || !isAI(game.turn)) return;
-  const by = game.turn;
+  const g = game, who = game.players[game.turn];
   setBusy(true, 'AIプレイヤーが次の手を考えています…');
   try {
     const m = await rivalMove(game, () => setStatus('AIプレイヤーが質問を考え直しています…'));
-    setStatus(`審判がAIプレイヤーの${m.type === 'answer' ? '解答' : '質問'}「${m.text}」を判定しています…`);
-    await applyMove(by, m.type, m.text);
+    if (game === g) {
+      setStatus(`審判がAIプレイヤーの${m.type === 'answer' ? '解答' : '質問'}「${m.text}」を判定しています…`);
+      await applyMove(g.players.indexOf(who), m.type, m.text);
+    }
   } catch (e) {
-    showError(e, true);
+    if (game === g) showError(e, true);
   } finally {
     setBusy(false);
   }
+  // 考える間に別の問題を開いていて、そちらが AIプレイヤーの番なら動かす
+  if (game && game !== g && !game.finished && isAI(game.turn)) runRival();
 }
 
 // 1手戻す：最後の手を取り消し、得点・発見も元に戻して、その手の人の番にする。
@@ -1636,12 +1656,26 @@ function openHint() {
   renderGame();
 }
 
+function canSkipTurn() {
+  return !!(game && game.room && !client.active && !game.finished && !busy && !roomPending() && !isAI(game.turn) && pName(game.turn) !== roomMe());
+}
+// 得点は変えず、手番だけ次の人に送る
+function skipTurn() {
+  if (!canSkipTurn()) return;
+  if (!confirm(`${pName(game.turn)}の番を飛ばして、次の人の番にしますか？\n得点は変わりません。`)) return;
+  game.turn = (game.turn + 1) % game.players.length;
+  saveGame();
+  renderGame();
+  if (isAI(game.turn)) runRival();
+}
+
 function giveUp() {
   if (busy || game.finished) return;
   if (!confirm('降参して答えを見ますか？（得点はここまでの合計で決まります）')) return;
   game.finished = true; game.result = 'giveup';
   saveGame();
   showReveal();
+  roomBroadcast();   // 部屋の参加者にも結果を出す
 }
 
 // ---- 部屋：各自の端末で遊ぶ（PeerJS・ホスト集約型。テンプレートの「端末間同期」の方式） ----
@@ -1734,10 +1768,11 @@ function onHostData(ent, d) {
   } else if (d.t === 'join') {
     const name = String(d.name || '').trim().slice(0, 20);
     if (!name) return;
+    const device = String(d.device || '').slice(0, 40);
+    replaceStaleConn(ent, name, device);
     if (name === roomMe() || room.conns.some(c => c !== ent && c.name === name)) { ent.conn.send({ t: 'join-ng', msg: `「${name}」はもう参加しています。別の名前を選んでください。` }); return; }
     if (!g.players.includes(name) && g.players.length >= 8) { ent.conn.send({ t: 'join-ng', msg: 'メンバーは8人までです。' }); return; }
     // 参加はホストの許可制。一度許可した端末（device）が同じ名前で入り直すときだけ、そのまま通す
-    const device = String(d.device || '').slice(0, 40);
     if (device && (g.devices || {})[device] === name && g.players.includes(name)) { ent.canWrite = Array.isArray(d.canWrite) ? d.canWrite.map(String).slice(0, 20) : []; acceptJoin(ent, name, device); return; }
     ent.canWrite = Array.isArray(d.canWrite) ? d.canWrite.map(String).slice(0, 20) : [];
     room.requests = [...room.requests.filter(r => r.ent !== ent), { ent, name, device }];
@@ -1757,9 +1792,19 @@ function onHostData(ent, d) {
     if (ent.name && game && game.room && game.judge === 'human' && ent.name === game.parent) applyParentReply(d);
   }
 }
+// 一度許可した端末が同じ名前で入り直すとき、残っている古い接続（画面が消えて切れた直後など）を外して閉じる
+function replaceStaleConn(ent, name, device) {
+  const g = loadGroups().find(x => x.id === room.groupId);
+  if (!g || !device || (g.devices || {})[device] !== name || !g.players.includes(name)) return;
+  room.conns.filter(c => c !== ent && c.name === name).forEach(c => {
+    room.conns = room.conns.filter(x => x !== c);
+    try { c.conn.close(); } catch (e) { /* すでに切れていれば無視 */ }
+  });
+}
 function acceptJoin(ent, name, device) {
   const g = loadGroups().find(x => x.id === room.groupId);
   if (!g) return;
+  replaceStaleConn(ent, name, device);
   if (name === roomMe() || room.conns.some(c => c !== ent && c.name === name)) { ent.conn.send({ t: 'join-ng', msg: `「${name}」はもう参加しています。別の名前を選んでください。` }); return; }
   const players = g.players.includes(name) ? g.players : [...g.players, name];   // 追加メンバーはグループにも登録する
   if (players.length > 8) { ent.conn.send({ t: 'join-ng', msg: 'メンバーは8人までです。' }); return; }
@@ -1960,11 +2005,12 @@ async function hostMove(by, kind, text) {
     saveGame(); renderGame();
     return;
   }
+  const g = game;
   setBusy(true, `審判が${pName(by)}の${kind === 'question' ? '質問' : '解答'}を判定しています…`);
   try { await applyMove(by, kind, text); }
-  catch (e) { showError(e); }
+  catch (e) { if (game === g) showError(e); }
   finally { setBusy(false); }
-  if (!game.finished && isAI(game.turn)) runRival();
+  if (game && !game.finished && isAI(game.turn)) runRival();
 }
 function applyParentReply(d) {
   const m = game.moves[game.moves.length - 1];
@@ -1985,7 +2031,7 @@ function applyParentReply(d) {
   delete m.pending;
   game.turn = (m.by + 1) % game.players.length;
   saveGame(); renderGame();
-  if (game.finished) setTimeout(showReveal, 900);
+  if (game.finished) revealSoon();
 }
 let parentResolve = null;
 function chooseParent(names) {
@@ -2154,9 +2200,10 @@ function onClientData(d) {
   if (d.t === 'welcome') {
     client.welcome = d;
     clearTimeout(client.timer);
-    // つなぎ直しのときは同じ名前で自動的に入り直す
+    // つなぎ直しのときは同じ名前で自動的に入り直す。前の接続がホストに残っていて taken に入っていても送る
+    // （同じ端末ならホストが入れ替える。別の端末なら断られて名前選びに戻る）
     const prev = client.name || load(`room-name-${client.code}`, '');
-    if (prev && !d.taken.includes(prev)) { client.conn.send({ t: 'join', name: prev, device: deviceId(), canWrite: writableRepos() }); return; }
+    if (prev) { client.conn.send({ t: 'join', name: prev, device: deviceId(), canWrite: writableRepos() }); return; }
     renderJoin('pick');
   } else if (d.t === 'join-wait') {
     renderJoin('wait', d.name);
@@ -2191,7 +2238,11 @@ function clientGame(s) {
 function renderClient(forceLobby) {
   const s = client.state;
   if (!s || !client.name) return;
-  if (s.lobby) { game = null; client.ans = null; client.revealed = ''; renderJoin('lobby'); return; }
+  if (s.lobby) {
+    // 結果の画面（真相・アンケート）を見ている間は、ホストが一覧に戻っても画面はそのまま（「待機画面へ」で戻る）
+    if (!forceLobby && game && game.finished && !document.getElementById('view-reveal').classList.contains('hidden')) return;
+    game = null; client.ans = null; client.revealed = ''; renderJoin('lobby'); return;
+  }
   if (s.reveal) {
     if (forceLobby || client.revealed === s.puzzle.id) { game = null; renderJoin('lobby'); return; }
     if (document.getElementById('view-reveal').classList.contains('hidden') || !game || game.puzzleId !== s.puzzle.id || !game.finished) {
@@ -2293,6 +2344,10 @@ function renderGame() {
   renderHints();
   document.getElementById('btn-undo').classList.toggle('hidden', game.finished || client.active || !game.moves.some(m => !game.players[m.by].ai));
   document.getElementById('btn-giveup').classList.toggle('hidden', client.active);
+  // 部屋のホストは、抜けた人の番で止まらないよう、人の番を飛ばせる
+  const skip = document.getElementById('btn-skip');
+  skip.classList.toggle('hidden', !canSkipTurn());
+  if (!game.finished) skip.textContent = `${pName(game.turn)}の番を飛ばす`;
   document.getElementById('s-turns').textContent = game.moves.length + (game.finished ? 0 : 1);
   const h = document.getElementById('history');
   h.textContent = '';
@@ -2327,7 +2382,10 @@ function renderGame() {
   }
   h.scrollTop = h.scrollHeight;
   const myTurn = !isAI(game.turn) && !game.finished && !pend && !game.remoteBusy && (!game.room || pName(game.turn) === myName());
-  ['btn-ask', 'btn-answer', 'btn-giveup'].forEach(id => document.getElementById(id).disabled = !myTurn || busy);
+  ['btn-ask', 'btn-answer'].forEach(id => document.getElementById(id).disabled = !myTurn || busy);
+  // 部屋のホストは誰の番でも降参（終了して答え合わせ）できる。抜けた人の番や親の回答待ちで止まっても抜けられるように
+  const hostRoom = game.room && !client.active;
+  document.getElementById('btn-giveup').disabled = !(hostRoom ? !game.finished : myTurn) || busy;
   renderParentPanel();
   roomBroadcast();
 }
@@ -3346,6 +3404,7 @@ document.getElementById('btn-ask').onclick = () => playerMove('question');
 document.getElementById('btn-answer').onclick = () => playerMove('answer');
 document.getElementById('btn-giveup').onclick = giveUp;
 document.getElementById('btn-undo').onclick = undoMove;
+document.getElementById('btn-skip').onclick = skipTurn;
 document.getElementById('btn-hint').onclick = openHint;
 document.getElementById('btn-share-progress').onclick = shareProgress;
 document.getElementById('group-select').onchange = e => {
@@ -3423,7 +3482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     catch (e) { alert('共有リンクを読み込めませんでした。'); history.replaceState(null, '', location.pathname); }
   }
   showList();
-  if (!settings.key && judgeMode === 'ai') openSettings();
+  if (!settings.key && !settings.groqKey && judgeMode === 'ai') openSettings();
 });
 </script>
 </body>
