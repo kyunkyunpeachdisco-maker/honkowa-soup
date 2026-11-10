@@ -669,7 +669,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.49';
+const APP_VERSION = 'v0.1.50';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -711,6 +711,18 @@ function saveCustom(list) { save('custom-puzzles', list); }
 const myRepo = { repo: load('data-repo', ''), pat: load('github-pat', '') };
 let collections = load('collections', []);   // [{ repo, token, name }]
 let repoCache = load('repo-cache', {});       // { 'owner/repo': [pkg, …] }
+// 控えの各問題が、リポジトリのどの版（sha）の中身か。起動時の読み直しで sha が同じなら本文を取りに行かない。
+// sha は控えの問題そのものに結び付けて持ち（中身と sha がずれないように）、repo-cache を保存するときに repo-shas（'owner/repo' → { id: sha }）へ書く
+const pkgSha = new WeakMap();
+{
+  const s = load('repo-shas', {});
+  Object.entries(repoCache).forEach(([repo, list]) => (list || []).forEach(p => { const sha = s[repo] && s[repo][p.pub.id]; if (sha) pkgSha.set(p, sha); }));
+}
+function saveRepoCache() {
+  save('repo-cache', repoCache);
+  save('repo-shas', Object.fromEntries(Object.entries(repoCache).map(([repo, list]) =>
+    [repo, Object.fromEntries((list || []).filter(p => pkgSha.has(p)).map(p => [p.pub.id, pkgSha.get(p)]))])));
+}
 let pkgIndex = {};                            // id → { pkg, from: 'local' | 'mine' | collection }
 let myAdditions = load('my-additions', []);   // 書き込める友達の問題集に、この端末から追加した問題（[{ repo, id }]。削除できるのはこれだけ）
 function addedByMe(repo, id) { return myAdditions.some(a => a.repo === repo && a.id === id); }
@@ -897,7 +909,7 @@ async function addToCollection(pkgs, c) {
     repoCache[c.repo] = [...(repoCache[c.repo] || []).filter(p => p.pub.id !== pkg.pub.id), pkg];
     if (!addedByMe(c.repo, pkg.pub.id)) myAdditions.push({ repo: c.repo, id: pkg.pub.id });
   }
-  save('repo-cache', repoCache); save('my-additions', myAdditions);
+  saveRepoCache(); save('my-additions', myAdditions);
   rebuildPuzzles();
   return `「${c.name}」の問題集に保存しました。`;
 }
@@ -910,7 +922,7 @@ async function removeCustomPuzzle(id) {
     await ghDeletePuzzle(id, c.repo, c.token);
     repoCache[c.repo] = (repoCache[c.repo] || []).filter(p => p.pub.id !== id);
     myAdditions = myAdditions.filter(a => !(a.repo === c.repo && a.id === id));
-    save('repo-cache', repoCache); save('my-additions', myAdditions);
+    saveRepoCache(); save('my-additions', myAdditions);
     rebuildPuzzles();
     deleteGameEverywhere(id);
     return;
@@ -919,7 +931,7 @@ async function removeCustomPuzzle(id) {
   if (myRepo.repo && repoCache[myRepo.repo]) {
     if (repoCache[myRepo.repo].some(p => p.pub.id === id)) await ghDeletePuzzle(id);
     repoCache[myRepo.repo] = repoCache[myRepo.repo].filter(p => p.pub.id !== id);
-    save('repo-cache', repoCache);
+    saveRepoCache();
   }
   rebuildPuzzles();
   deleteGameEverywhere(id);
@@ -965,7 +977,8 @@ async function fetchRepoReviews(repo, token) {
   }));
   return out;
 }
-async function fetchRepoPuzzles(repo, token) {
+// listOnly：一覧（sha）だけ取り、本文は読まない（読めるトークンかを確かめるとき）
+async function fetchRepoPuzzles(repo, token, listOnly = false) {
   const nameDone = fetchRepoName(repo, token);
   const res = await fetch(ghUrl(repo, 'puzzles'), { headers: ghHeaders(token), cache: 'no-store' });
   if (res.status === 404) {
@@ -978,12 +991,17 @@ async function fetchRepoPuzzles(repo, token) {
   if (!res.ok) throw new Error(ghErrorText(res.status));
   const files = (await res.json()).filter(f => f.type === 'file' && f.name.endsWith('.json'));
   const shas = {}, pkgs = [];
+  files.forEach(f => { shas[f.name.replace(/\.json$/, '')] = f.sha; });
+  if (listOnly) { await nameDone; return { pkgs, shas }; }
+  const cached = repoCache[repo] || [];
   await Promise.all(files.map(async f => {
     const id = f.name.replace(/\.json$/, '');
-    shas[id] = f.sha;
+    // 前回読んだときと sha が同じで、控えにその問題があれば、控えの中身を使う
+    const prev = cached.find(p => p.pub.id === id);
+    if (prev && pkgSha.get(prev) === f.sha) { pkgs.push(prev); return; }
     const r = await fetch(ghUrl(repo, f.path), { headers: ghHeaders(token, true), cache: 'no-store' });
     if (!r.ok) return;
-    try { const pkg = normalizePuzzle(JSON.parse(await r.text())); pkg.pub.id = id; pkgs.push(pkg); } catch (e) { /* 壊れたファイルは飛ばす */ }
+    try { const pkg = normalizePuzzle(JSON.parse(await r.text())); pkg.pub.id = id; pkgSha.set(pkg, f.sha); pkgs.push(pkg); } catch (e) { /* 壊れたファイルは飛ばす */ }
   }));
   pkgs.sort((a, b) => a.pub.id.localeCompare(b.pub.id));
   await nameDone;
@@ -1030,6 +1048,7 @@ async function ghPutPuzzle(pkg, repo = myRepo.repo, token = myRepo.pat, sha = nu
   if (sha && (res.status === 409 || res.status === 422)) throw new ConflictError('リポジトリ側でこの問題が更新されています。いったん閉じて、もう一度「編集」を押してください（最新の内容を読み込みます）。');
   if (!res.ok) throw new Error(ghErrorText(res.status));
   shas[pkg.pub.id] = (await res.json()).content.sha;
+  pkgSha.set(pkg, shas[pkg.pub.id]);
 }
 async function ghDeletePuzzle(id, repo = myRepo.repo, token = myRepo.pat) {
   const shas = shaCache[repo] || (shaCache[repo] = {});
@@ -1118,7 +1137,7 @@ async function uploadLocal() {
     sent.push(localId);
   }
   saveCustom(loadCustom().filter(c => !sent.includes(c.pub.id)));
-  save('repo-cache', repoCache);
+  saveRepoCache();
   rebuildPuzzles();
   return await ensureGuideFile() ? '\nリポジトリに案内ファイル（CLAUDE.md）を作成しました。' : '';
 }
@@ -1138,7 +1157,7 @@ async function syncRepos() {
     try { repoCache[c.repo] = (await fetchRepoPuzzles(c.repo, c.token)).pkgs; }
     catch (e) { msgs.push(`「${c.name}」を読み込めませんでした：${e.message}`); }
   }));
-  save('repo-cache', repoCache);
+  saveRepoCache();
   // 評価（失敗しても遊ぶのには困らないので、知らせない）
   const reviewSrc = [...(myRepo.repo && myRepo.pat ? [[myRepo.repo, myRepo.pat]] : []), ...collections.map(c => [c.repo, c.token])];
   await Promise.all(reviewSrc.map(async ([repo, token]) => { try { reviewCache[repo] = await fetchRepoReviews(repo, token); } catch (e) { /* 控えのまま */ } }));
@@ -1152,7 +1171,7 @@ async function syncRepos() {
 // ---- 友達への招待リンク（読み取り専用トークン入り） ----
 // writable：問題を追加できる招待（トークンは Contents: Read and write）
 async function makeInviteLink(token, name, writable) {
-  await fetchRepoPuzzles(myRepo.repo, token);   // 読めるトークンか確かめる
+  await fetchRepoPuzzles(myRepo.repo, token, true);   // 読めるトークンか確かめる
   return `${location.origin}${location.pathname}#i=${await encodeJson({ r: myRepo.repo, t: token, n: name, ...(writable ? { w: 1 } : {}) })}`;
 }
 async function openInvite(code) {
@@ -1168,13 +1187,13 @@ async function openInvite(code) {
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
   collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
   save('collections', collections);
-  repoCache[d.r] = pkgs; save('repo-cache', repoCache);
+  repoCache[d.r] = pkgs; saveRepoCache();
   rebuildPuzzles();
   alert(`「${d.n || d.r}」の問題集（${pkgs.length}問）を読み込みました。` + (settings.key || settings.groqKey || judgeMode === 'human' ? '' : '\nAIと遊ぶ場合は、「設定」で Gemini APIキーを入れてください（人が出題者になって遊ぶならキーは要りません）。') + (d.w ? '\n「＋ 問題を作る・追加」で、この問題集に問題を追加できます。作った問題の答えは、作ったあなた以外には見えません。' : ''));
 }
 function removeCollection(repo) {
   collections = collections.filter(c => c.repo !== repo); save('collections', collections);
-  delete repoCache[repo]; save('repo-cache', repoCache);
+  delete repoCache[repo]; saveRepoCache();
   rebuildPuzzles();
 }
 
@@ -1243,24 +1262,38 @@ function parseJsonReply(text, detail) {
   catch (e) { throw new ApiError('AIの返答を読み取れませんでした。もう一度試してください。', -1, `${detail} / ${text.slice(0, 80) || '（空の返答）'}`); }
 }
 
-async function callGroq(system, prompt, temperature, model) {
-  let res;
+// AI の応答を待つ上限（ミリ秒）。本文を読み終えるまでを含めて打ち切る（AbortSignal.timeout が無い環境もあるので自前で）
+let AI_TIMEOUT_MS = 60000;
+async function fetchAI(url, init, model, read) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), AI_TIMEOUT_MS);
+  let res = null;
   try {
-    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.groqKey}` },
-      body: JSON.stringify({
-        model, temperature,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-      }),
-    });
+    res = await fetch(url, { ...init, signal: ctl.signal });
+    return await read(res);
   } catch (e) {
-    throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
+    if (ctl.signal.aborted) throw new ApiError('AIの応答が返ってきませんでした。もう一度試してください。', 0, `${model}: ${Math.round(AI_TIMEOUT_MS / 1000)}秒で打ち切り`);
+    if (!res) throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) throw await httpError(res, 'Groq', model);
-  const json = await res.json();
-  return parseJsonReply(json.choices?.[0]?.message?.content || '', model);
+}
+
+async function callGroq(system, prompt, temperature, model) {
+  return fetchAI('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.groqKey}` },
+    body: JSON.stringify({
+      model, temperature,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    }),
+  }, model, async res => {
+    if (!res.ok) throw await httpError(res, 'Groq', model);
+    const json = await res.json();
+    return parseJsonReply(json.choices?.[0]?.message?.content || '', model);
+  });
 }
 
 // role: 'gm'（審判）| 'rival'（AIプレイヤー）。Groq のキーと「使い方」の設定に応じて振り分け、
@@ -1315,9 +1348,7 @@ async function callAI(role, system, prompt, temperature) {
 
 async function callGemini(system, prompt, temperature, model = settings.model) {
   if (!settings.key) { openSettings(); throw new ApiError('APIキーが未設定です', 0); }
-  let res;
-  try {
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  return fetchAI(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.key },
     body: JSON.stringify({
@@ -1325,17 +1356,15 @@ async function callGemini(system, prompt, temperature, model = settings.model) {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature },
     }),
-    });
-  } catch (e) {
-    throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
-  }
-  if (!res.ok) throw await httpError(res, 'Gemini', model);
-  const json = await res.json();
-  const cand = json.candidates?.[0];
-  const parts = cand?.content?.parts || [];
-  const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
-  const why = cand?.finishReason || json.promptFeedback?.blockReason || '';
-  return parseJsonReply(text, `${model}${why ? ' / ' + why : ''}`);
+  }, model, async res => {
+    if (!res.ok) throw await httpError(res, 'Gemini', model);
+    const json = await res.json();
+    const cand = json.candidates?.[0];
+    const parts = cand?.content?.parts || [];
+    const text = parts.filter(p => !p.thought).map(p => p.text || '').join('');
+    const why = cand?.finishReason || json.promptFeedback?.blockReason || '';
+    return parseJsonReply(text, `${model}${why ? ' / ' + why : ''}`);
+  });
 }
 
 function historyText(game) {
@@ -1412,11 +1441,17 @@ const RIVAL_SYSTEM = `あなたは推理ゲーム「本当にあった怖いス�
 
 // 知識だけで即答できないよう、確認済みの事実が一定数そろうまでAIプレイヤーは解答できない
 const RIVAL_MIN_CONFIRMED = 3;
+function rivalCanAnswer(game) {
+  return game.moves.filter(m => m.reply === 'はい' || m.reply === '部分的にはい').length >= RIVAL_MIN_CONFIRMED;
+}
+// applyMove の戻り値：AIプレイヤーの質問が解答とみなされたが、まだ解答できない段階（runRival が質問を出し直させる）
+const RIVAL_REDO = 'rival-redo';
 
-async function rivalMove(game, onRetry) {
-  const confirmed = game.moves.filter(m => m.reply === 'はい' || m.reply === '部分的にはい').length;
-  const canAnswer = confirmed >= RIVAL_MIN_CONFIRMED;
-  const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。`;
+// redo: 前の質問が真相をまとめて言い当てる形だったので、出し直させるとき
+async function rivalMove(game, onRetry, redo) {
+  const canAnswer = rivalCanAnswer(game);
+  const rule = canAnswer ? '' : `\n\n※ まだ確認された事実が少ないため、今回は解答できません。必ず質問をしてください。` +
+    (redo ? '質問の形でも、真相をまとめて言い当てる文は解答とみなされます。1つの事実だけを確かめる短い質問にしてください。' : '');
   const prompt = `【問題文】\n${game.puzzle.question_text}\n\n${hintsText(game, answerData)}【これまでの質問と回答】\n${historyText(game)}\n\n【現在の得点】${game.players.map((p, i) => `${p.ai ? 'あなた（AIプレイヤー）' : p.name}${game.scores[i]}点`).join('、')}${rule}\n\nあなたの手番です。形式：{"type":"question|answer","text":"質問文または解答文"}`;
   let r = await callAI('rival', RIVAL_SYSTEM, prompt, 0.7);
   // 解答できない段階で解答を返したら、質問を出し直させる（質問扱いにすると審判が解答とみなして素通りするため）
@@ -1487,9 +1522,21 @@ function saveGame() {
 }
 function scoresLine(g = game) { return g.players.map((p, i) => `${p.name} ${g.scores[i]}点`).join('・'); }
 
-async function startPuzzle(puzzle) {
+// showDone: 部屋ではない対戦が終わっていたら、新しく始めずにその結果を出す（新しく始めるのは結果画面の「もう一度遊ぶ」）
+async function startPuzzle(puzzle, showDone = true) {
   lastError = null;
   const saved = loadGames()[puzzle.id];
+  if (showDone && saved && saved.finished && !saved.room && !roomNewGame && saved.puzzle) {
+    let ans = null;
+    try { ans = await loadAnswer(puzzle.id); } catch (e) { /* 答えを読めなければ新しく始める */ }
+    if (ans && ans.reveal) {
+      game = normalizeGame(saved);
+      if (!game.groupId) game.groupId = currentGroup().id;
+      game.puzzle = puzzle;
+      answerData = ans;
+      return showReveal();
+    }
+  }
   game = saved && !saved.finished ? normalizeGame(saved) : newGame(puzzle);
   if (!game.groupId) game.groupId = currentGroup().id;
   game.puzzle = puzzle;
@@ -1541,6 +1588,8 @@ async function applyMove(by, kind, text) {
     if (game !== g) return false;
     by = g.players.indexOf(who);
     if (r.answerLike) {
+      // AIプレイヤーが解答できない段階なら、解答として判定せず質問を出し直させる（知識だけでの即答を防ぐ）
+      if (isAI(by) && !rivalCanAnswer(g)) return RIVAL_REDO;
       if (!isAI(by)) {
         // 部屋で別の端末の人の手なら、その人の端末で確かめてもらう（送り直されたら解答として判定）
         if (isRemote(by)) { roomSendTo(pName(by), { t: 'confirm-answer', text }); return false; }
@@ -1579,10 +1628,15 @@ async function runRival() {
   const g = game, who = game.players[game.turn];
   setBusy(true, 'AIプレイヤーが次の手を考えています…');
   try {
-    const m = await rivalMove(game, () => setStatus('AIプレイヤーが質問を考え直しています…'));
-    if (game === g) {
+    const onRetry = () => setStatus('AIプレイヤーが質問を考え直しています…');
+    // 審判が解答とみなした質問を、解答できない段階で出してきたら出し直させる（2回まで）
+    for (let i = 0; ; i++) {
+      const m = await rivalMove(g, onRetry, i > 0);
+      if (game !== g) break;
       setStatus(`審判がAIプレイヤーの${m.type === 'answer' ? '解答' : '質問'}「${m.text}」を判定しています…`);
-      await applyMove(g.players.indexOf(who), m.type, m.text);
+      if (await applyMove(g.players.indexOf(who), m.type, m.text) !== RIVAL_REDO) break;
+      if (i >= 2) throw new ApiError('AIプレイヤーの手を読み取れませんでした。もう一度試してください。', -1);
+      onRetry();
     }
   } catch (e) {
     if (game === g) showError(e, true);
@@ -1858,7 +1912,15 @@ function recordSurvey(puzzleId, name, d) {
   g.survey = { ...(g.survey || {}), [name]: d.skip || !(stars >= 1 && stars <= 5) ? { skip: true } : { stars, comment: String(d.comment || '').trim().slice(0, 300) } };
   all[puzzleId] = g; saveGames(all, room.groupId);
   if (g === game) { renderSurvey(); roomBroadcast(); }
+  else sendSurveyState(g);
   scheduleReviewWrite(puzzleId);
+}
+// ホストが一覧などに戻ったあとも、結果画面に残っている参加者にアンケートの集まり具合を届ける
+function sendSurveyState(g) {
+  room.conns.forEach(c => {
+    if (!c.name) return;
+    try { c.conn.send({ t: 'survey-state', puzzleId: g.puzzleId, survey: g.survey || {}, reviewNote: g.reviewNote || '' }); } catch (e) { /* 切れた相手は close で外れる */ }
+  });
 }
 // ---- 評価を問題集（データリポジトリ）に書く ----
 // ホストが評価を取りまとめ、その問題が入っている問題集のリポジトリへ書く。書く人はホスト本人が書ければホスト、
@@ -1904,10 +1966,25 @@ async function writeReviewsFor(puzzleId) {
   writer.conn.send({ t: 'write-reviews', repo, repoName: repoLabel(repo), puzzleId, entry });
 }
 function setReviewNote(puzzleId, note) {
-  if (game && game.puzzleId === puzzleId) { game.reviewNote = note; renderSurvey(); roomBroadcast(); }
+  if (game && game.puzzleId === puzzleId) { game.reviewNote = note; renderSurvey(); roomBroadcast(); return; }
+  const all = loadGames(room.groupId), g = all[puzzleId];
+  if (!g || !g.room) return;
+  g.reviewNote = note; saveGames(all, room.groupId);
+  sendSurveyState(g);
 }
 // reviews/<id>.json：遊んだ回ごとの配列。同じ回（id）は置き換え、sha が合わなければ1回だけ読み直してやり直す
+// 参加者の端末ではホストから届いた値をそのまま書くので、id と中身の形をここで確かめる（別のファイルを書き換えさせない）
+function cleanReviewEntry(e) {
+  if (!e || typeof e !== 'object' || typeof e.id !== 'string' || typeof e.date !== 'string' ||
+    !Array.isArray(e.players) || !e.players.every(p => typeof p === 'string')) throw new Error('評価の形が正しくありません');
+  const ratings = Object.fromEntries(Object.entries(e.ratings && typeof e.ratings === 'object' ? e.ratings : {})
+    .filter(([, r]) => r && Number.isInteger(r.stars) && r.stars >= 1 && r.stars <= 5)
+    .map(([n, r]) => [n, { stars: r.stars, ...(typeof r.comment === 'string' && r.comment ? { comment: r.comment.slice(0, 300) } : {}) }]));
+  return { id: e.id, date: e.date, players: e.players, ratings };
+}
 async function ghUpsertReview(repo, token, puzzleId, entry) {
+  if (typeof puzzleId !== 'string' || !/^[\w.-]+$/.test(puzzleId)) throw new Error('問題の id が正しくありません');
+  entry = cleanReviewEntry(entry);
   const url = ghUrl(repo, `reviews/${puzzleId}.json`);
   const attempt = async () => {
     const r = await fetch(url, { headers: ghHeaders(token), cache: 'no-store' });
@@ -1982,7 +2059,8 @@ function publicState() {
   const pz = game.puzzle;
   return {
     puzzle: { id: pz.id, title: pz.title, question_text: pz.question_text, difficulty: pz.difficulty },
-    players: game.players, moves: game.moves, scores: game.scores, found: game.found, turn: game.turn,
+    // 外れた解答の判定理由（reason）は真相に触れることがあるので、答え合わせまでは配らない
+    players: game.players, moves: game.finished ? game.moves : game.moves.map(({ reason, ...m }) => m), scores: game.scores, found: game.found, turn: game.turn,
     finished: game.finished, result: game.result, judge: game.judge, parent: game.parent || '',
     hintTexts: shownHints(), busy: busy ? statusLabel : '', error: lastError && !busy ? lastError.message : '',
     reveal: game.finished && answerData ? { puzzle: pz, answer: answerData } : null, survey: game.survey || {}, reviewNote: game.reviewNote || '',
@@ -2223,6 +2301,14 @@ function onClientData(d) {
     ghUpsertReview(d.repo, token, d.puzzleId, d.entry)
       .then(() => client.conn.send({ t: 'reviews-written', puzzleId: d.puzzleId, ok: true, repoName: d.repoName }))
       .catch(e => client.conn.send({ t: 'reviews-written', puzzleId: d.puzzleId, ok: false, msg: e.message }));
+  } else if (d.t === 'survey-state') {
+    // いま見ている結果画面がその問題のときだけ、集まり具合を反映する（書きかけのコメントは消さない）
+    if (!game || !game.finished || game.puzzleId !== d.puzzleId || document.getElementById('view-reveal').classList.contains('hidden')) return;
+    const sv = d.survey && typeof d.survey === 'object' ? d.survey : {};
+    const mine = (game.survey || {})[client.name];
+    game.survey = { ...sv, ...(mine && !sv[client.name] ? { [client.name]: mine } : {}) };
+    game.reviewNote = String(d.reviewNote || '');
+    renderSurvey();
   } else if (d.t === 'confirm-answer') {
     if (confirm(`「${d.text}」は真相をまとめて当てにいく形なので、解答として扱います。\n解答として判定しますか？（外れると−1）\n\n「キャンセル」で書き直せます。`)) client.conn.send({ t: 'move', kind: 'answer', text: d.text });
     else document.getElementById('input').value = d.text;
@@ -2511,7 +2597,7 @@ function showReveal(shared) {
       delete all[game.puzzleId]; saveGames(all, gid);
       return startRoomPuzzle(game.puzzle);
     }
-    if (shared) { history.replaceState(null, '', location.pathname); return startPuzzle(game.puzzle); }
+    if (shared) { history.replaceState(null, '', location.pathname); return startPuzzle(game.puzzle, false); }
     const gid = game.groupId || 'solo', all = loadGames(gid);
     delete all[game.puzzleId]; saveGames(all, gid);
     startPuzzle(game.puzzle);
@@ -3162,7 +3248,7 @@ async function openEditPuzzle(id) {
     // リポジトリにある問題は、最新の内容と sha を読み直してから開く
     try {
       const r = await fetchRepoPuzzles(t.repo, t.token);
-      shaCache[t.repo] = r.shas; repoCache[t.repo] = r.pkgs; save('repo-cache', repoCache); rebuildPuzzles();
+      shaCache[t.repo] = r.shas; repoCache[t.repo] = r.pkgs; saveRepoCache(); rebuildPuzzles();
     } catch (e) { alert('リポジトリを読み込めませんでした：' + e.message); return; }
     if (!pkgIndex[id]) { alert('この問題はリポジトリから削除されています。'); renderList(); return; }
     editingSha = shaCache[t.repo][id];
@@ -3185,7 +3271,7 @@ async function saveEditedPuzzle(text) {
   } else {
     saveCustom(loadCustom().map(p => p.pub.id === editingId ? pkg : p));
   }
-  save('repo-cache', repoCache);
+  saveRepoCache();
   rebuildPuzzles();
   return pkg.pub.title;
 }
@@ -3328,7 +3414,7 @@ document.getElementById('lib-save').onclick = async () => {
     const r = await fetchRepoPuzzles(repo, pat);
     if (myRepo.repo && myRepo.repo !== repo) delete repoCache[myRepo.repo];
     myRepo.repo = repo; myRepo.pat = pat; shaCache[repo] = r.shas; repoCache[repo] = r.pkgs; guideChecked = false;
-    save('data-repo', repo); save('github-pat', pat); save('repo-cache', repoCache);
+    save('data-repo', repo); save('github-pat', pat); saveRepoCache();
     collections = collections.filter(c => c.repo !== repo); save('collections', collections);
     const note = await uploadLocal();
     const name = document.getElementById('lib-name').value.trim().slice(0, 30);
@@ -3346,7 +3432,7 @@ document.getElementById('lib-save').onclick = async () => {
 };
 document.getElementById('lib-clear').onclick = () => {
   if (!myRepo.repo || !confirm('データリポジトリの設定を外しますか？\n（リポジトリの問題は消えません。この端末の一覧から見えなくなります）')) return;
-  delete repoCache[myRepo.repo]; save('repo-cache', repoCache);
+  delete repoCache[myRepo.repo]; saveRepoCache();
   myRepo.repo = ''; myRepo.pat = '';
   save('data-repo', ''); save('github-pat', '');
   document.getElementById('lib-repo').value = ''; document.getElementById('lib-pat').value = '';
