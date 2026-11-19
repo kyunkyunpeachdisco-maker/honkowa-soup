@@ -272,8 +272,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <p class="intro">謎はすべて実話。質問を重ねて真相を当てる水平思考クイズです。 <button class="link" id="intro-about">遊び方</button></p>
     <div class="group-bar">
       <select id="group-select" aria-label="遊ぶ人と審判"></select>
-      <button id="btn-group-edit" aria-label="遊ぶ人と審判の設定" title="遊ぶ人と審判の設定">⚙</button>
+      <button id="btn-group-edit" aria-label="遊ぶ人と審判の編集" title="遊ぶ人と審判の編集">⚙ 編集</button>
     </div>
+    <p class="note hidden" id="nokey-note">APIキーが無くても遊べます：上の欄で「問題を閲覧する」を選ぶか、「⚙ 編集」で審判を「人が出題者」にしてください。AIと遊ぶときは <button class="link" id="nokey-settings">設定</button> でキーを入れます。</p>
     <div id="room-panel" class="room-panel hidden"></div>
     <div class="search-row">
       <input type="search" id="f-q" placeholder="キーワードで探す" aria-label="キーワード">
@@ -412,7 +413,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <li>順番に1手ずつ、質問か解答をします。審判が記録をもとに答えます</li>
       <li>だれかが真相を当てるか「降参」で終わり。得点がいちばん多い人の勝ちです</li>
       <li>行き詰まったら「ヒント」（得点は変わりません）。打ち間違えたら「1手戻す」</li>
-      <li>遊ぶ人と審判（AI／人）は、一覧の上の ⚙ で決めます</li>
+      <li>遊ぶ人と審判（AI／人）は、一覧の上の「⚙ 編集」で決めます</li>
     </ul>
     <table class="about-table">
       <tr><td>重要な事実を見つけた</td><td>＋1</td></tr>
@@ -424,9 +425,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
     <details>
       <summary>友達と遊ぶ</summary>
       <ul>
-        <li><b>1台を回す</b>：⚙ でグループ名とメンバーを登録し、「〇〇の番です」の順に端末を回します。進み具合はグループごとに保存されます</li>
+        <li><b>1台を回す</b>：「⚙ 編集」でグループ名とメンバーを登録し、「〇〇の番です」の順に端末を回します。進み具合はグループごとに保存されます</li>
         <li><b>人が出題者</b>：審判を「人が出題者」にすると AI なし・キーなしで遊べます。出題者が答えを見ながら、口頭の質問に答えます</li>
-        <li><b>チャットで遊ぶ</b>：⚙ で入れると、この端末がホストになり、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要・入るにはホストの許可が要る）。人が出題者のときは問題ごとに親を選び、答えは親にだけ見えます</li>
+        <li><b>チャットで遊ぶ</b>：「⚙ 編集」で入れると、この端末がホストになり、ほかの人は招待リンクか QR コードで自分のスマホから参加します（参加する人はキー不要・入るにはホストの許可が要る）。人が出題者のときは問題ごとに親を選び、答えは親にだけ見えます</li>
         <li>問題が終わると全員に星とコメントのアンケートが出ます（スキップ可）。評価は問題集のデータリポジトリに保存され、一覧の「★4.5（3）」から評価とコメントを見られます。「絞り込み」の「評価」でも探せます</li>
         <li>「問題と経過を共有」で、問題文とここまでの経過を LINE などに貼れます（答えは含まれません）</li>
       </ul>
@@ -587,7 +588,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 <div id="settings" class="overlay hidden">
   <div class="modal">
     <h2>セットアップ</h2>
-    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。AIと遊ぶには Gemini のAPIキーが1つ必要です（一覧の上の ⚙ で審判を「人が出題者」にすれば、キーなしで遊べます）。<br>
+    <p class="note">このゲームは、出題者（審判）とAIプレイヤーを Google の Gemini AI が担当します。AIと遊ぶには Gemini のAPIキーが1つ必要です（一覧の上の「⚙ 編集」で審判を「人が出題者」にすれば、キーなしで遊べます）。<br>
     回数が足りないときの予備として、Groq のキーも任意で追加できます。<br>
     キーはこの端末のブラウザ内（localStorage）にのみ保存されます。送信先は Google（と、入れた場合は Groq）の API だけです。</p>
 
@@ -620,7 +621,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <label>審判のモデル
       <select id="set-model">
         <option value="gemini-4-hydrogen">gemini-4-hydrogen（最新・お試し）</option>
-        <option value="gemini-3.8-flash">gemini-3.8-flash（標準）</option>
+        <option value="gemini-3.8-flash">gemini-3.8-flash（審判の標準）</option>
         <option value="gemini-3.6-flash">gemini-3.6-flash</option>
         <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（軽量・回数重視）</option>
         <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite（最軽量）</option>
@@ -630,7 +631,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
         <option value="gemini-4-hydrogen">gemini-4-hydrogen（最新・お試し）</option>
         <option value="gemini-3.8-flash">gemini-3.8-flash</option>
         <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（標準）</option>
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（軽量・AIプレイヤーの標準）</option>
         <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite（最軽量）</option>
       </select></label>
       <p class="note">ふだんは標準のままで大丈夫です。審判は正確さが要るので標準、AIプレイヤーは軽量モデルにしています。無料枠の上限はモデルごとに決まっているので、分けておくと上限に当たりにくくなります。上限にすぐ当たるときは審判も軽量モデルにしてください（判定の正確さは少し落ちます）。</p>
@@ -674,7 +675,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.54';
+const APP_VERSION = 'v0.1.55';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1187,7 +1188,7 @@ async function openInvite(code) {
   const kind = d.w ? '問題の追加もできます' : '読み取り専用です';
   const intro = settings.key || settings.groqKey ? '' :
     '「本当にあった怖いスープ」への招待です。実際の記録をもとにした謎を、AIや友達と順番に質問しながら解く水平思考クイズです。\n' +
-    'AIと遊ぶには Google の Gemini APIキー（無料）が1つ要ります。誰か1人が出題者になって遊ぶなら、キーは要りません（一覧の上の ⚙ で切り替え）。\n\n';
+    'AIと遊ぶには Google の Gemini APIキー（無料）が1つ要ります。誰か1人が出題者になって遊ぶなら、キーは要りません（一覧の上の「⚙ 編集」で切り替え）。\n\n';
   if (!confirm(`${intro}「${d.n || d.r}」の問題集を読み込みますか？\n（${kind}。答えは答え合わせまで表示されません）`)) return;
   const pkgs = (await fetchRepoPuzzles(d.r, d.t)).pkgs;
   collections = [...collections.filter(c => c.repo !== d.r), { repo: d.r, token: d.t, name: String(d.n || d.r), writable: !!d.w }];
@@ -3215,13 +3216,19 @@ function updateGroup(id, change) {
 function renderGroupBar() {
   const sel = document.getElementById('group-select');
   sel.textContent = '';
+  // 最初からある遊び方・作ったグループ・新しく作る、を見出しで分ける
+  const builtin = document.createElement('optgroup'); builtin.label = '遊び方';
+  const mine = document.createElement('optgroup'); mine.label = '作ったグループ';
+  const add = document.createElement('optgroup'); add.label = '新しく作る';
   loadGroups().forEach(g => {
     const judge = (g.judge || load('judge', 'ai')) === 'human' ? '人が出題者' : 'AIが審判';
     const who = isBuiltinGroup(g.id) ? '' : `（${g.players.length}人${g.npc && judge === 'AIが審判' ? '＋AI' : ''}）`;
-    sel.appendChild(new Option(g.id === 'solo-human' ? SOLO_HUMAN.name : `${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
+    (isBuiltinGroup(g.id) ? builtin : mine).appendChild(new Option(g.id === 'solo-human' ? SOLO_HUMAN.name : `${g.name}${who}・${judge}${g.chat ? '・チャット' : ''}`, g.id));
   });
-  sel.appendChild(new Option('＋ 新しいグループ', '__new'));
+  add.appendChild(new Option('＋ 新しいグループ', '__new'));
+  [builtin, mine, add].forEach(o => { if (o.children.length) sel.appendChild(o); });
   sel.value = currentGroup().id;
+  document.getElementById('nokey-note').classList.toggle('hidden', judgeMode !== 'ai' || !!settings.key || !!settings.groqKey);
 }
 let editingGroupId = null;
 function openGroup(g) {
@@ -3334,6 +3341,7 @@ document.getElementById('set-save').onclick = () => {
   save('gemini-api-key', settings.key); save('model', settings.model); save('rival-model', settings.rivalModel);
   save('groq-api-key', settings.groqKey); save('groq-use', settings.groqUse);
   closeSettings();
+  document.getElementById('nokey-note').classList.add('hidden');
 };
 document.getElementById('set-cancel').onclick = closeSettings;
 document.getElementById('btn-settings').onclick = openSettings;
@@ -3528,6 +3536,7 @@ document.getElementById('group-select').onchange = e => {
   save('group', e.target.value); renderList();
 };
 document.getElementById('btn-group-edit').onclick = () => openGroup(currentGroup());
+document.getElementById('nokey-settings').onclick = () => openSettings();
 document.getElementById('g-cancel').onclick = () => document.getElementById('group-modal').classList.add('hidden');
 document.getElementById('g-save').onclick = () => {
   try {
