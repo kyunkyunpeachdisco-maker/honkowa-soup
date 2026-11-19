@@ -167,6 +167,7 @@ h2 > .copy-icon { margin: -4px 0 0 4px; }
 .reveal .result { font-size: 18px; font-weight: 700; margin: 4px 0 12px; }
 .reveal ul { padding-left: 20px; margin: 0; }
 .reveal li { margin-bottom: 6px; }
+.reveal .missed { border-left: 3px dashed var(--line); padding: 2px 0 2px 26px; }
 .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chain span { background: var(--chip); border-radius: 8px; padding: 4px 8px; font-size: 14px; }
 .chain i { color: var(--sub); font-style: normal; }
@@ -673,7 +674,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.51';
+const APP_VERSION = 'v0.1.52';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1276,7 +1277,11 @@ async function fetchAI(url, init, model, read) {
     res = await fetch(url, { ...init, signal: ctl.signal });
     return await read(res);
   } catch (e) {
-    if (ctl.signal.aborted) throw new ApiError('AIの応答が返ってきませんでした。もう一度試してください。', 0, `${model}: ${Math.round(AI_TIMEOUT_MS / 1000)}秒で打ち切り`);
+    if (ctl.signal.aborted) {
+      const err = new ApiError('AIの応答が返ってきませんでした。もう一度試してください。', 0, `${model}: ${Math.round(AI_TIMEOUT_MS / 1000)}秒で打ち切り`);
+      err.timeout = true;
+      throw err;
+    }
     if (!res) throw new ApiError('通信に失敗しました。電波の状態を確認して、もう一度試してください。', 0, `${model}: ${e.message}`);
     throw e;
   } finally {
@@ -1334,15 +1339,16 @@ async function callAI(role, system, prompt, temperature) {
       else modelNotes[role] = '';
       return r;
     } catch (e) {
-      // 回数の上限（429）と、Gemini 側の混雑・障害（5xx）は次のモデルで試す。それ以外（キー誤りなど）はそのまま止める
-      if (e.status !== 429 && !(e.status >= 500)) throw e;
+      // 回数の上限（429）と、Gemini 側の混雑・障害（5xx）・応答なし（打ち切り）は次のモデルで試す。それ以外（キー誤りなど）はそのまま止める
+      if (e.status !== 429 && !(e.status >= 500) && !e.timeout) throw e;
       lastErr = e;
-      reason = e.status === 429 ? '上限' : '混雑中';
+      reason = e.status === 429 ? '上限' : e.timeout ? '応答なし' : '混雑中';
+      if (e.timeout) setStatus(`${MODEL_LABEL[model] || model} の応答が返ってこないため、${who}を別のモデルで試しています…`);
       if (e.quota === 'day') { exhausted[model] = nextPacificMidnightDate().getTime(); save('exhausted', exhausted); }
     }
   }
   if (groq) {
-    noteFallback(role, `Gemini が${reason === '上限' ? 'すべて上限' : '混雑・上限'}のため、${who}は Groq（${GROQ_MODELS[role]}）で動いています。`);
+    noteFallback(role, `Gemini が${reason === '上限' ? 'すべて上限' : '混雑・上限・応答なしなど'}のため、${who}は Groq（${GROQ_MODELS[role]}）で動いています。`);
     return callGroq(system, prompt, temperature, GROQ_MODELS[role]);
   }
   if (lastErr && !chain.every(isExhausted)) throw lastErr;
@@ -1397,7 +1403,7 @@ const GM_SYSTEM = `あなたは推理ゲーム「本当にあった怖いスー�
 async function askGM(kind, text, game, answer) {
   const puzzle = game.puzzle;
   const facts = answer.reference_facts.map(f => `- ${f.fact}（${f.layer}）`).join('\n');
-  const disc = answer.discoveries.map(d => `- ${d.id}: ${d.fact}${game.found[d.id] ? '（発見済み）' : ''}`).join('\n');
+  const disc = answer.discoveries.map(d => `- ${d.id}: ${d.fact}${game.found[d.id] != null ? '（発見済み）' : ''}`).join('\n');
   const common = `【問題文】\n${puzzle.question_text}\n\n${hintsText(game, answer)}【真相】\n${answer.reveal.summary}\n\n【正解条件】\n${answer.answer_criteria}\n\n【資料の事実】\n${facts}\n\n【発見点】\n${disc}\n\n【これまでの質問と回答】\n${historyText(game)}`;
   if (kind === 'question') {
     const prompt = `${common}
@@ -1415,14 +1421,14 @@ ${text}
 4. 言葉の意味や一般常識についての質問なら、常識で "はい" / "いいえ" / "どちらとも言えない" のいずれかで答える（分類があいまい・見方で変わる場合は "どちらとも言えない"）
 5. 出来事について資料が肯定していれば "はい"、否定していれば "いいえ"、一部だけ合っていれば "部分的にはい"
 6. 出来事について、真相に関係するが資料に記載がないなら "資料では不明"
-7. 今回の質問と回答で、まだ発見されていない発見点のどれかの「要点」（その事実が真相の中で果たす役割）が確かめられたなら、その id を discovery に1つだけ入れる。文中の細部（物の名前・数字など）まですべて一致していなくてよい（例：発見点「マーカーのにおいが異臭として感じられ、緊急事態宣言につながった」に対し「異臭が発生したから宣言したのですか？→はい」は付与してよい）。ただし「遊んでいた？」のように、どの発見点の要点にも届かない広い質問には付けない。該当しなければ null
+7. 今回の質問と回答で、まだ発見されていない発見点のどれかの「要点」（その事実が真相の中で果たす役割）が確かめられたなら、その id を discovery に1つだけ入れる。文中の細部（物の名前・数字など）まですべて一致していなくてよい（例：発見点「マーカーのにおいが異臭として感じられ、緊急事態宣言につながった」に対し「異臭が発生したから宣言したのですか？→はい」は付与してよい）。ただし「遊んでいた？」のように、どの発見点の要点にも届かない広い質問には付けない。「持ち物や装備が関係した？」「何かが原因？」のように、発見点の中心になる物・原因を具体的に挙げず分類だけで聞く質問にも付けない（「はい」と答えるのはよい）。また、発見点の前提や関連する事柄を確かめただけで、その発見点の要点そのもの（例：「なぜそうしたか」の理由）が質問と回答で確かめられていないときも付けない。該当しなければ null
 
 形式：{"kind":"question|answer_like","answer":"はい|いいえ|部分的にはい|どちらとも言えない|重要ではありません|関係ありません|資料では不明|既出です","discovery":"d1など|null"}`;
     const r = await callAI('gm', GM_SYSTEM, prompt, 0);
     const answers = ['はい', 'いいえ', '部分的にはい', 'どちらとも言えない', '重要ではありません', '関係ありません', '資料では不明', '既出です'];
     const label = answers.includes(r.answer) ? r.answer : '資料では不明';
     let discovery = typeof r.discovery === 'string' ? r.discovery : null;
-    if (!answer.discoveries.some(d => d.id === discovery) || game.found[discovery]) discovery = null;
+    if (!answer.discoveries.some(d => d.id === discovery) || game.found[discovery] != null) discovery = null;
     if (['どちらとも言えない', '重要ではありません', '関係ありません', '資料では不明', '既出です'].includes(label)) discovery = null;
     return { answerLike: r.kind === 'answer_like', answer: label, discovery };
   }
@@ -3054,16 +3060,27 @@ function hostText(p, ans, md) {
 function appendAnswer(box, p, ans, g) {
   const sec = (t, node) => { box.appendChild(el('h2', '', t)); box.appendChild(node); };
   const list = (items, tag = 'ul') => { const l = el(tag); items.forEach(x => l.appendChild(typeof x === 'string' ? el('li', '', x) : x)); return l; };
-  sec('重要な事実', list(ans.discoveries.map(d => {
-    const li = el('li', '', d.fact);
-    if (g) {
-      const by = g.found[d.id], has = by !== undefined && by !== null;
-      li.appendChild(el('span', 'note', has ? `（${pName(by)}が発見）` : '（未発見）'));
-      if (has) li.style.color = `var(--${pCls(by)})`;
+  if (g) {
+    // 対戦の結果：見つけた事実と、見つけないまま終わった事実（見逃したピース）を分けて見せる
+    const isFound = d => g.found[d.id] !== undefined && g.found[d.id] !== null;
+    const found = ans.discoveries.filter(isFound), missed = ans.discoveries.filter(d => !isFound(d));
+    sec(`見つけた重要な事実（${found.length}/${ans.discoveries.length}）`, found.length ? list(found.map(d => {
+      const li = el('li', '', d.fact);
+      li.appendChild(el('span', 'note', `（${pName(g.found[d.id])}が発見）`));
+      li.style.color = `var(--${pCls(g.found[d.id])})`;
+      return li;
+    })) : el('p', 'note', '質問で見つけた事実はありませんでした。'));
+    if (missed.length) {
+      sec(`見逃したピース（${missed.length}個）`, list(missed.map(d => el('li', '', d.fact)), 'ul'));
+      box.lastChild.className = 'missed';
+      box.appendChild(el('p', 'note', '質問で確かめないまま終わった事実です。真相とあわせて読むと、話がつながります。'));
+    } else {
+      box.appendChild(el('p', 'note', '重要な事実をすべて見つけました。'));
     }
-    return li;
-  })));
-  if (!g) box.appendChild(el('p', 'note', '質問で確かめられたら、見つけた人に＋1などにします。'));
+  } else {
+    sec('重要な事実', list(ans.discoveries.map(d => el('li', '', d.fact))));
+    box.appendChild(el('p', 'note', '質問で確かめられたら、見つけた人に＋1などにします。'));
+  }
   sec('真相', el('p', '', ans.reveal.summary));
   if (ans.reveal.causal_chain.length) {
     const chain = el('div', 'chain');
@@ -3091,13 +3108,22 @@ function appendAnswer(box, p, ans, g) {
   sec('出典', src);
   box.appendChild(el('p', 'note', 'これは創作ではなく、実際に記録されている話です。'));
 }
+function discoveryLines(ans, g, h, li) {
+  if (!g) return [h('重要な事実'), ...ans.discoveries.map(d => li(d.fact)), ''];
+  const isFound = d => g.found[d.id] !== undefined && g.found[d.id] !== null;
+  const found = ans.discoveries.filter(isFound), missed = ans.discoveries.filter(d => !isFound(d));
+  return [
+    h(`見つけた重要な事実（${found.length}/${ans.discoveries.length}）`), ...(found.length ? found.map(d => li(`${d.fact}（${who(g.found[d.id])}が発見）`)) : ['なし']), '',
+    ...(missed.length ? [h(`見逃したピース（${missed.length}個）`), ...missed.map(d => li(d.fact)), ''] : []),
+  ];
+}
 function answerLines(p, ans, md, g) {
   const h = t => md ? `## ${t}` : `【${t}】`;
   const li = t => md ? `- ${t}` : `・${t}`;
   const opened = g ? g.hints || 0 : 0;
   return [
     h('問題'), p.question_text, '',
-    h('重要な事実'), ...ans.discoveries.map(d => li(g ? `${d.fact}（${d.id in g.found ? who(g.found[d.id]) + 'が発見' : '未発見'}）` : d.fact)), '',
+    ...discoveryLines(ans, g, h, li),
     h('真相'), ans.reveal.summary, '', ans.reveal.causal_chain.join(' → '), '',
     h('正解の条件'), ans.answer_criteria, '',
     h('質問に答えるための資料'), ...ans.reference_facts.map(f => li(f.fact + (f.layer === 'reporter_claim' ? '（本人の申告）' : ''))), '',
