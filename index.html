@@ -618,15 +618,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
       <h3><span class="num">2</span>モデルを選ぶ</h3>
       <label>審判のモデル
       <select id="set-model">
+        <option value="gemini-4-hydrogen">gemini-4-hydrogen（最新・お試し）</option>
         <option value="gemini-3.8-flash">gemini-3.8-flash（標準）</option>
         <option value="gemini-3.6-flash">gemini-3.6-flash</option>
         <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（軽量・回数重視）</option>
+        <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite（最軽量）</option>
       </select></label>
       <label>AIプレイヤーのモデル
       <select id="set-rival-model">
+        <option value="gemini-4-hydrogen">gemini-4-hydrogen（最新・お試し）</option>
         <option value="gemini-3.8-flash">gemini-3.8-flash</option>
         <option value="gemini-3.6-flash">gemini-3.6-flash</option>
         <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（標準）</option>
+        <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite（最軽量）</option>
       </select></label>
       <p class="note">ふだんは標準のままで大丈夫です。審判は正確さが要るので標準、AIプレイヤーは軽量モデルにしています。無料枠の上限はモデルごとに決まっているので、分けておくと上限に当たりにくくなります。上限にすぐ当たるときは審判も軽量モデルにしてください（判定の正確さは少し落ちます）。</p>
     </section>
@@ -669,7 +673,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.50';
+const APP_VERSION = 'v0.1.51';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1299,8 +1303,8 @@ async function callGroq(system, prompt, temperature, model) {
 // role: 'gm'（審判）| 'rival'（AIプレイヤー）。Groq のキーと「使い方」の設定に応じて振り分け、
 // Gemini が回数制限（429）に当たったら Groq に切り替える
 // 上限に当たったときに順に試す Gemini のモデル（上から質が高い）
-const GEMINI_CHAIN = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
-const MODEL_LABEL = { 'gemini-3.8-flash': '3.8 Flash', 'gemini-3.6-flash': '3.6 Flash', 'gemini-3.5-flash-lite': '3.5 Flash-Lite' };
+const GEMINI_CHAIN = ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+const MODEL_LABEL = { 'gemini-4-hydrogen': '4 Hydrogen', 'gemini-3.8-flash': '3.8 Flash', 'gemini-3.6-flash': '3.6 Flash', 'gemini-3.5-flash-lite': '3.5 Flash-Lite', 'gemini-3.1-flash-lite': '3.1 Flash-Lite' };
 // 今日の上限に達したモデル → リセット時刻（ミリ秒）。リセットを過ぎたら再び使う
 const exhausted = load('exhausted', {});
 function isExhausted(model) { return exhausted[model] && exhausted[model] > Date.now(); }
