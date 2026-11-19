@@ -674,7 +674,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.53';
+const APP_VERSION = 'v0.1.54';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -860,7 +860,7 @@ ${GEN_SOURCES.map(x => `   - ${x.name}：${x.url}`).join('\n')}
 - ${idRule}
 - tags は題材の分野を表す日本語の短い言葉を2〜4個（例：航空・船・鉄道・医療・鉱山・戦争・道具・動物・におい）。既存の問題と同じ言葉をなるべく使う
 - fatal は、その出来事で人が亡くなっていれば true、そうでなければ false（問題文や答えに死亡を書かない場合も、資料に死者が書かれていれば true）
-- answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る
+- answer_criteria は「必須：(1)…(2)…」の形で、正解に必要な要素を2〜3個に絞る。推理では言い当てにくい品目・数値・人名（例：約800kgのカニ）は必須にせず「大量の漁獲（カニ）」のように役割で書き、細部は括弧で添える
 - discoveries は真相にたどり着くための重要な事実を3〜5個
 - hints は行き詰まったときのヒントを2〜3個、弱い順に。資料の事実だけを使い、真相や answer_criteria の要素をそのまま書かない
 - reference_facts は審判が質問に答えるための資料。本文の事実を6〜12個、日本語で。layer は資料にそのまま書かれた事実なら "confirmed"、体験者本人の申告なら "reporter_claim"
