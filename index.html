@@ -675,7 +675,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 'use strict';
 // ---- 保存（localStorage は必ず honkowa-soup- プレフィックス） ----
 // リリース時に release.yml がタグ名（例: v0.1.2）へ置き換える
-const APP_VERSION = 'v0.1.55';
+const APP_VERSION = 'v0.1.56';
 const versionLabel = APP_VERSION.startsWith('__') ? 'バージョン：開発版' : `バージョン：${APP_VERSION}`;
 const LS = 'honkowa-soup-';
 let storageWarned = false;
@@ -1764,7 +1764,10 @@ function loadScript(src, ready) {
     document.head.appendChild(sc);
   });
 }
-const loadPeer = () => loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', () => !!window.Peer);
+// 直接つながらないときの中継役（game-relay）。空なら PeerJS だけで動く
+const RELAY_URL = 'https://game-relay.game-relay-worker.workers.dev';
+const loadPeer = () => loadScript('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', () => !!window.Peer)
+  .then(() => loadScript('netpeer.js', () => !!window.NetPeer)).then(() => { NetPeer.relay = RELAY_URL; });
 const loadQr = () => loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js', () => !!window.qrcode);
 
 function roomGroup() { const g = currentGroup(); return g.chat && !isBuiltinGroup(g.id) ? g : null; }
@@ -1802,7 +1805,7 @@ async function openRoom(g) {
   renderRoomPanel();
   try { await loadPeer(); } catch (e) { room.status = ''; room.error = e.message; renderRoomPanel(); return; }
   if (room.groupId !== g.id || room.code !== g.room || room.peer) return;
-  const peer = new Peer(roomPeerId(g.room));
+  const peer = new NetPeer(roomPeerId(g.room));
   room.peer = peer;
   peer.on('open', () => { room.status = '開いています'; room.error = ''; renderRoomPanel(); });
   peer.on('error', e => {
@@ -2271,7 +2274,7 @@ async function startClient(code) {
   renderJoin('connecting');
   try { await loadPeer(); } catch (e) { renderJoin('error', e.message); return; }
   if (client.peer) { try { client.peer.destroy(); } catch (e) { /* 作り直す */ } }
-  const peer = new Peer();
+  const peer = new NetPeer();
   client.peer = peer;
   clearTimeout(client.timer);
   client.timer = setTimeout(() => { if (!client.welcome) renderJoin('nohost'); }, 15000);
